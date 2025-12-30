@@ -341,5 +341,4 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ## 🤖 AI Contributing
 
-
-
+AI contributing are welcome, on the PR add the model you used and the prompt to obtain that code.
