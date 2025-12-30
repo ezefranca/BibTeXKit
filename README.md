@@ -1,6 +1,7 @@
 # BibTeXKit
 
 <p align="center">
+  <img src="https://github.com/ezefranca/BibTeXKit/actions/workflows/build.yml/badge.svg" alt="Build Status" />
   <img src="https://img.shields.io/badge/platforms-iOS%2015%2B%20%7C%20macOS%2012%2B%20%7C%20tvOS%2015%2B%20%7C%20watchOS%208%2B%20%7C%20visionOS%201%2B-blue.svg" alt="Platforms" />
   <img src="https://img.shields.io/badge/Swift-6.1%2B-orange.svg" alt="Swift 6.1+" />
   <img src="https://img.shields.io/badge/SPM-compatible-brightgreen.svg" alt="Swift Package Manager" />
