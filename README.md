@@ -31,13 +31,13 @@ Add BibTeXKit to your project via Xcode:
 
 1. File → Add Package Dependencies...
 2. Enter: `https://github.com/ezefranca/BibTeXKit.git`
-3. Select "Up to Next Major Version" with `1.0.0`
+3. Select "Up to Next Major Version" with `1.0.1`
 
 Or add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ezefranca/BibTeXKit.git", from: "1.0.0")
+    .package(url: "https://github.com/ezefranca/BibTeXKit.git", from: "1.0.1")
 ]
 ```
 
