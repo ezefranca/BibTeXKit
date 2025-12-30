@@ -161,24 +161,24 @@ public struct DefaultLightTheme: BibTeXTheme {
     
     public init() {}
     
-    public var backgroundColor: Color { Color(.systemBackground) }
-    public var textColor: Color { Color(.label) }
-    public var entryTypeColor: Color { Color(.systemBlue) }
-    public var citationKeyColor: Color { Color(.systemOrange) }
-    public var fieldNameColor: Color { Color(.systemGreen) }
-    public var stringColor: Color { Color(.systemRed) }
-    public var numberColor: Color { Color(.systemPurple) }
-    public var punctuationColor: Color { Color(.secondaryLabel) }
-    public var operatorColor: Color { Color(.label) }
-    public var commentColor: Color { Color(.tertiaryLabel) }
-    public var specialColor: Color { Color(.systemPink) }
-    public var constantColor: Color { Color(.systemTeal) }
-    public var commandColor: Color { Color(.systemIndigo) }
-    public var mathColor: Color { Color(.systemPurple) }
-    public var accentColor: Color { Color(.systemBrown) }
+    public var backgroundColor: Color { Color(white: 0.98) }
+    public var textColor: Color { Color.primary }
+    public var entryTypeColor: Color { Color.blue }
+    public var citationKeyColor: Color { Color.orange }
+    public var fieldNameColor: Color { Color.green }
+    public var stringColor: Color { Color.red }
+    public var numberColor: Color { Color.purple }
+    public var punctuationColor: Color { Color.secondary }
+    public var operatorColor: Color { Color.primary }
+    public var commentColor: Color { Color.gray }
+    public var specialColor: Color { Color.pink }
+    public var constantColor: Color { Color.teal }
+    public var commandColor: Color { Color.indigo }
+    public var mathColor: Color { Color.purple }
+    public var accentColor: Color { Color.brown }
     public var borderColor: Color { Color.primary }
-    public var lineNumberColor: Color { Color(.tertiaryLabel) }
-    public var selectionColor: Color { Color(.systemBlue).opacity(0.2) }
+    public var lineNumberColor: Color { Color.gray }
+    public var selectionColor: Color { Color.blue.opacity(0.2) }
     public var font: Font { .system(.body, design: .monospaced) }
     public var fontSize: CGFloat { 13 }
 }

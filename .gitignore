@@ -63,3 +63,4 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 /DerivedData
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.DS_Store
