@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-lightgrey.svg" alt="MIT License" />
 </p>
 
-![logo]()
+![logo](https://github.com/ezefranca/BibTeXKit/blob/main/.github/images/example1.png?raw=true)
 
 **BibTeXKit** is a modern, Swift-native framework for parsing, displaying, and manipulating BibTeX bibliographic data. Built with SwiftUI, it provides beautiful syntax highlighting and a highly customizable viewing experience across all Apple platforms.
 
