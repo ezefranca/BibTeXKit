@@ -341,6 +341,6 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ## 🤖 AI Contributing
 
-AI contributions are welcome! When submitting a PR, please add the model you used and the prompt to obtain that code.
+AI contributions are welcome! When submitting a PR, please add the model you used and the prompt to obtain that code. [Like this](https://github.com/ezefranca/BibTeXKit/pull/1)
 
 For AI agents looking to integrate with BibTeXKit, see the [Agent Guide](Agents.md) for comprehensive API documentation and usage patterns.
