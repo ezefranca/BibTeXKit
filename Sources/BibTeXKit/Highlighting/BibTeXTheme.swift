@@ -157,7 +157,7 @@ extension BibTeXTheme {
 
 /// The default light theme.
 public struct DefaultLightTheme: BibTeXTheme {
-    public var name: String { "DefaultLightTheme" }
+    public var name: String { "Default Light" }
     
     public init() {}
     
@@ -187,7 +187,7 @@ public struct DefaultLightTheme: BibTeXTheme {
 
 /// The default dark theme.
 public struct DefaultDarkTheme: BibTeXTheme {
-    public var name: String { "DefaultDarkTheme" }
+    public var name: String { "Default Dark" }
     
     public init() {}
     
@@ -217,7 +217,7 @@ public struct DefaultDarkTheme: BibTeXTheme {
 
 /// An Xcode-inspired light theme.
 public struct XcodeLightTheme: BibTeXTheme {
-    public var name: String { "XcodeLightTheme" }
+    public var name: String { "Xcode Light" }
     
     public init() {}
     
@@ -247,7 +247,7 @@ public struct XcodeLightTheme: BibTeXTheme {
 
 /// An Xcode-inspired dark theme.
 public struct XcodeDarkTheme: BibTeXTheme {
-    public var name: String { "XcodeDarkTheme" }
+    public var name: String { "Xcode Dark" }
     
     public init() {}
     
@@ -277,7 +277,7 @@ public struct XcodeDarkTheme: BibTeXTheme {
 
 /// A Monokai-inspired dark theme.
 public struct MonokaiTheme: BibTeXTheme {
-    public var name: String { "MonokaiTheme" }
+    public var name: String { "Monokai" }
     
     public init() {}
     
@@ -307,7 +307,7 @@ public struct MonokaiTheme: BibTeXTheme {
 
 /// A Solarized Light theme.
 public struct SolarizedLightTheme: BibTeXTheme {
-    public var name: String { "SolarizedLightTheme" }
+    public var name: String { "Solarized Light" }
     
     public init() {}
     
@@ -338,7 +338,7 @@ public struct SolarizedLightTheme: BibTeXTheme {
 /// A Solarized Dark theme.
 public struct SolarizedDarkTheme: BibTeXTheme {
  
-    public var name: String { "SolarizedDarkTheme" }
+    public var name: String { "Solarized Dark" }
     
     public init() {}
     
@@ -368,7 +368,7 @@ public struct SolarizedDarkTheme: BibTeXTheme {
 
 /// A theme that automatically adapts to light/dark mode.
 public struct AdaptiveTheme: BibTeXTheme {
-    public var name: String { "AdaptiveTheme" }
+    public var name: String { current.name }
     
     private let lightTheme: any BibTeXTheme
     private let darkTheme: any BibTeXTheme

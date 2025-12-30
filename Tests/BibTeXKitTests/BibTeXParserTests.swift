@@ -13,13 +13,15 @@ final class BibTeXParserTests: XCTestCase {
     // MARK: - Basic Parsing Tests
     
     func testParseEmptyString() throws {
-        let entries = try BibTeXParser.parse("")
-        XCTAssertTrue(entries.isEmpty)
+        XCTAssertThrowsError(try BibTeXParser.parse("")) { error in
+            XCTAssertEqual(error as? BibTeXParser.Error, .emptyInput)
+        }
     }
     
     func testParseWhitespaceOnly() throws {
-        let entries = try BibTeXParser.parse("   \n\t   ")
-        XCTAssertTrue(entries.isEmpty)
+        XCTAssertThrowsError(try BibTeXParser.parse("   \n\t   ")) { error in
+            XCTAssertEqual(error as? BibTeXParser.Error, .emptyInput)
+        }
     }
     
     func testParseSingleEntry() throws {
@@ -73,11 +75,11 @@ final class BibTeXParserTests: XCTestCase {
     }
     
     func testParseCustomType() throws {
-        let bibtex = "@dataset{mydata, title = {My Dataset}}"
+        let bibtex = "@customtype{mydata, title = {My Dataset}}"
         let entries = try BibTeXParser.parse(bibtex)
         
         XCTAssertEqual(entries.count, 1)
-        XCTAssertEqual(entries.first?.type, .custom("dataset"))
+        XCTAssertEqual(entries.first?.type, .custom("customtype"))
     }
     
     func testParseCaseInsensitiveType() throws {
@@ -144,7 +146,8 @@ final class BibTeXParserTests: XCTestCase {
         
         XCTAssertEqual(entries.first?.fields.count, 8)
         XCTAssertEqual(entries.first?["volume"], "42")
-        XCTAssertEqual(entries.first?["pages"], "100--200")
+        // LaTeX -- is converted to en-dash when convertLaTeXToUnicode is true (default)
+        XCTAssertEqual(entries.first?["pages"], "100–200")
     }
     
     // MARK: - Key Parsing Tests
@@ -250,9 +253,8 @@ final class BibTeXParserTests: XCTestCase {
     func testInvalidEntryType() throws {
         let bibtex = "@{test, title = {Test}}"
         
-        // Should not crash, might skip invalid entries
-        let entries = try BibTeXParser.parse(bibtex)
-        XCTAssertTrue(entries.isEmpty)
+        // Should throw an error for invalid entry type
+        XCTAssertThrowsError(try BibTeXParser.parse(bibtex))
     }
     
     func testMissingClosingBrace() throws {
@@ -267,9 +269,8 @@ final class BibTeXParserTests: XCTestCase {
     func testMissingKey() throws {
         let bibtex = "@article{, title = {Test}}"
         
-        let entries = try BibTeXParser.parse(bibtex)
-        // Should handle gracefully
-        _ = entries
+        // Should throw an error for missing citation key
+        XCTAssertThrowsError(try BibTeXParser.parse(bibtex))
     }
     
     // MARK: - Comments and Whitespace Tests

@@ -143,20 +143,20 @@ public enum BibTeXEntryType: Hashable, Sendable {
     /// A human-readable description of the entry type.
     public var localizedDescription: String {
         switch self {
-        case .article: return "Journal Article"
+        case .article: return "Journal article"
         case .book: return "Book"
         case .booklet: return "Booklet"
-        case .inbook: return "Book Section"
-        case .incollection: return "Book Chapter"
-        case .inproceedings, .conference: return "Conference Paper"
+        case .inbook: return "Book section"
+        case .incollection: return "Book chapter"
+        case .inproceedings, .conference: return "Conference paper"
         case .manual: return "Manual"
-        case .mastersthesis: return "Master's Thesis"
-        case .phdthesis: return "PhD Thesis"
+        case .mastersthesis: return "Master's thesis"
+        case .phdthesis: return "PhD thesis"
         case .proceedings: return "Proceedings"
-        case .techreport: return "Technical Report"
+        case .techreport: return "Technical report"
         case .unpublished: return "Unpublished"
         case .misc: return "Miscellaneous"
-        case .online: return "Online Resource"
+        case .online: return "Online resource"
         case .software: return "Software"
         case .dataset: return "Dataset"
         case .custom(let value): return value.capitalized
@@ -209,6 +209,44 @@ public enum BibTeXEntryType: Hashable, Sendable {
         case .unpublished:
             return ["author", "title", "note"]
         case .misc, .online, .software, .dataset, .custom:
+            return []
+        }
+    }
+    
+    /// The optional fields for this entry type.
+    public var optionalFields: Set<String> {
+        switch self {
+        case .article:
+            return ["volume", "number", "pages", "month", "doi", "url", "note", "abstract", "keywords"]
+        case .book:
+            return ["volume", "number", "series", "address", "edition", "month", "doi", "url", "note", "abstract", "keywords", "editor"]
+        case .booklet:
+            return ["author", "howpublished", "address", "month", "year", "note"]
+        case .inbook:
+            return ["volume", "number", "series", "type", "address", "edition", "month", "pages", "note"]
+        case .incollection:
+            return ["editor", "volume", "number", "series", "type", "chapter", "pages", "address", "edition", "month", "note"]
+        case .inproceedings, .conference:
+            return ["editor", "volume", "number", "series", "pages", "address", "month", "organization", "publisher", "note"]
+        case .manual:
+            return ["author", "organization", "address", "edition", "month", "year", "note"]
+        case .mastersthesis, .phdthesis:
+            return ["type", "address", "month", "note"]
+        case .proceedings:
+            return ["editor", "volume", "number", "series", "address", "month", "organization", "publisher", "note"]
+        case .techreport:
+            return ["type", "number", "address", "month", "note"]
+        case .unpublished:
+            return ["month", "year"]
+        case .misc:
+            return ["author", "title", "howpublished", "month", "year", "note", "url"]
+        case .online:
+            return ["author", "title", "url", "urldate", "year", "month", "note"]
+        case .software:
+            return ["author", "title", "url", "version", "year", "month", "note"]
+        case .dataset:
+            return ["author", "title", "url", "year", "publisher", "version", "note"]
+        case .custom:
             return []
         }
     }

@@ -1,0 +1,26 @@
+{
+  "configurations" : [
+    {
+      "id" : "13C99E3E-5498-4A03-8585-B264C0EEA756",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true,
+    "testExecutionOrdering" : "random"
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "BibTeXKitTests",
+        "name" : "BibTeXKitTests"
+      }
+    }
+  ],
+  "version" : 1
+}

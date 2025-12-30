@@ -199,10 +199,10 @@ final class LaTeXConverterTests: XCTestCase {
     // MARK: - Quotation Tests
     
     func testQuotationMarks() {
-        XCTAssertEqual(LaTeXConverter.toUnicode("``"), "\"")
-        XCTAssertEqual(LaTeXConverter.toUnicode("''"), "\"")
-        XCTAssertEqual(LaTeXConverter.toUnicode("`"), "'")
-        XCTAssertEqual(LaTeXConverter.toUnicode("'"), "'")
+        XCTAssertEqual(LaTeXConverter.toUnicode("``"), "\u{201C}")  // Left double quotation mark "
+        XCTAssertEqual(LaTeXConverter.toUnicode("''"), "\u{201D}")  // Right double quotation mark "
+        XCTAssertEqual(LaTeXConverter.toUnicode("`"), "'")          // Left single quotation mark '
+        XCTAssertEqual(LaTeXConverter.toUnicode("'"), "'")          // Right single quotation mark '
     }
     
     // MARK: - Dash Tests

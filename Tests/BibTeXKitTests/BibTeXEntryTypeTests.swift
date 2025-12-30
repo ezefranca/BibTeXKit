@@ -106,7 +106,7 @@ final class BibTeXEntryTypeTests: XCTestCase {
     }
     
     func testOptionalFields() {
-        let optional = BibTeXEntryType.article.requiredFields
+        let optional = BibTeXEntryType.article.optionalFields
         XCTAssertTrue(optional.contains("volume"))
         XCTAssertTrue(optional.contains("number"))
         XCTAssertTrue(optional.contains("pages"))

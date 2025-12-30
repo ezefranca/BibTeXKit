@@ -125,7 +125,7 @@ public struct BibTeXParser: Sendable {
         )
         
         public init(
-            preserveRawBibTeX: Bool = true,
+            preserveRawBibTeX: Bool = false,
             normalizeFieldNames: Bool = true,
             stripDelimiters: Bool = true,
             convertLaTeXToUnicode: Bool = true
@@ -524,11 +524,13 @@ public struct BibTeXParser: Sendable {
         // Strip outer quotes
         if result.hasPrefix("\"") && result.hasSuffix("\"") && result.count >= 2 {
             result = String(result.dropFirst().dropLast())
+            result = result.trimmingCharacters(in: .whitespaces)
         }
         
         // Strip outer braces
         if result.hasPrefix("{") && result.hasSuffix("}") && result.count >= 2 {
             result = String(result.dropFirst().dropLast())
+            result = result.trimmingCharacters(in: .whitespaces)
         }
         
         return result

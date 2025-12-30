@@ -94,19 +94,45 @@ public struct LaTeXConverter: Sendable {
         "\\textasciitilde": "~",
         "\\textasciicircum": "^",
         "\\textbackslash": "\\",
+        "\\ss{}": "ß",
+        "\\ss ": "ß",
         "\\ss": "ß",
         "\\SS": "SS",
+        "\\ae{}": "æ",
+        "\\ae ": "æ",
         "\\ae": "æ",
+        "\\AE{}": "Æ",
+        "\\AE ": "Æ",
         "\\AE": "Æ",
+        "\\oe{}": "œ",
+        "\\oe ": "œ",
         "\\oe": "œ",
+        "\\OE{}": "Œ",
+        "\\OE ": "Œ",
         "\\OE": "Œ",
+        "\\aa{}": "å",
+        "\\aa ": "å",
         "\\aa": "å",
+        "\\AA{}": "Å",
+        "\\AA ": "Å",
         "\\AA": "Å",
+        "\\o{}": "ø",
+        "\\o ": "ø",
         "\\o": "ø",
+        "\\O{}": "Ø",
+        "\\O ": "Ø",
         "\\O": "Ø",
+        "\\l{}": "ł",
+        "\\l ": "ł",
         "\\l": "ł",
+        "\\L{}": "Ł",
+        "\\L ": "Ł",
         "\\L": "Ł",
+        "\\i{}": "ı",
+        "\\i ": "ı",
         "\\i": "ı",
+        "\\j{}": "ȷ",
+        "\\j ": "ȷ",
         "\\j": "ȷ",
         "\\dag": "†",
         "\\ddag": "‡",
@@ -176,23 +202,23 @@ public struct LaTeXConverter: Sendable {
     public static func toUnicode(_ input: String) -> String {
         var result = input
         
-        // Convert special characters first (longer sequences)
+        // Convert Greek letters FIRST (must be before accents to avoid partial matches like \kappa matching \k)
+        for (latex, unicode) in greekLetters.sorted(by: { $0.key.count > $1.key.count }) {
+            result = result.replacingOccurrences(of: latex, with: unicode)
+        }
+        
+        // Convert accents (after Greek letters to avoid partial matches)
+        result = convertAccents(in: result)
+        
+        // Convert math symbols (must be before special characters)
+        for (latex, unicode) in mathSymbols.sorted(by: { $0.key.count > $1.key.count }) {
+            result = result.replacingOccurrences(of: latex, with: unicode)
+        }
+        
+        // Convert special characters (longer sequences first)
         for (latex, unicode) in specialCharacters.sorted(by: { $0.key.count > $1.key.count }) {
             result = result.replacingOccurrences(of: latex, with: unicode)
         }
-        
-        // Convert Greek letters
-        for (latex, unicode) in greekLetters {
-            result = result.replacingOccurrences(of: latex, with: unicode)
-        }
-        
-        // Convert math symbols
-        for (latex, unicode) in mathSymbols {
-            result = result.replacingOccurrences(of: latex, with: unicode)
-        }
-        
-        // Convert accents
-        result = convertAccents(in: result)
         
         // Remove remaining braces that were just for grouping
         result = removeGroupingBraces(from: result)
@@ -220,15 +246,27 @@ public struct LaTeXConverter: Sendable {
     
     // MARK: - Private Methods
     
+    /// Order of accent processing to avoid conflicts
+    private static let accentOrder = ["'", "`", "^", "\"", "~", "=", ".", "u", "v", "H", "c", "k", "r"]
+    
     private static func convertAccents(in input: String) -> String {
         var result = input
         
-        for (accent, charMap) in accentMappings {
-            // Pattern: \'{e} or \'e
-            let bracedPattern = "\\\\\(accent)\\{([a-zA-Z])\\}"
-            let unbracedPattern = "\\\\\(accent)([a-zA-Z])"
+        // Process accents in a specific order to avoid conflicts
+        for accent in accentOrder {
+            guard let charMap = accentMappings[accent] else { continue }
             
-            // Replace braced version
+            // Escape special regex characters in the accent
+            let escapedAccent = NSRegularExpression.escapedPattern(for: accent)
+            
+            // Pattern: \'{e} - braced version
+            let bracedPattern = "\\\\\(escapedAccent)\\{([a-zA-Z])\\}"
+            // Pattern: \'e - unbraced version (no space)
+            let unbracedPattern = "\\\\\(escapedAccent)([a-zA-Z])"
+            // Pattern: \' e - with space
+            let spacedPattern = "\\\\\(escapedAccent) ([a-zA-Z])"
+            
+            // Replace braced version first
             if let regex = try? NSRegularExpression(pattern: bracedPattern) {
                 let range = NSRange(result.startIndex..., in: result)
                 let matches = regex.matches(in: result, range: range)
@@ -245,7 +283,24 @@ public struct LaTeXConverter: Sendable {
                 }
             }
             
-            // Replace unbraced version
+            // Replace spaced version
+            if let regex = try? NSRegularExpression(pattern: spacedPattern) {
+                let range = NSRange(result.startIndex..., in: result)
+                let matches = regex.matches(in: result, range: range)
+                
+                for match in matches.reversed() {
+                    if let charRange = Range(match.range(at: 1), in: result) {
+                        let char = result[charRange].first!
+                        if let replacement = charMap[char] {
+                            if let fullRange = Range(match.range, in: result) {
+                                result.replaceSubrange(fullRange, with: String(replacement))
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Replace unbraced version (must be after spaced to avoid matching the letter after space)
             if let regex = try? NSRegularExpression(pattern: unbracedPattern) {
                 let range = NSRange(result.startIndex..., in: result)
                 let matches = regex.matches(in: result, range: range)
@@ -294,10 +349,19 @@ public struct LaTeXConverter: Sendable {
     private static let unicodeToLaTeX: [Character: String] = {
         var mapping: [Character: String] = [:]
         
+        // Simple accent characters that don't need braces
+        let simpleAccents: Set<String> = ["'", "`", "^", "\"", "~"]
+        
         // Add accent mappings
         for (accent, charMap) in accentMappings {
             for (original, converted) in charMap {
-                mapping[converted] = "\\\(accent){\(original)}"
+                if simpleAccents.contains(accent) {
+                    // Use unbraced format for simple accents: \'e
+                    mapping[converted] = "\\\(accent)\(original)"
+                } else {
+                    // Use braced format for complex accents: \c{c}
+                    mapping[converted] = "\\\(accent){\(original)}"
+                }
             }
         }
         
@@ -316,6 +380,13 @@ public struct LaTeXConverter: Sendable {
         mapping["Ø"] = "\\O"
         mapping["ł"] = "\\l"
         mapping["Ł"] = "\\L"
+        
+        // Add Greek letters
+        for (latex, unicode) in greekLetters {
+            if let char = unicode.first, unicode.count == 1 {
+                mapping[char] = latex
+            }
+        }
         
         return mapping
     }()

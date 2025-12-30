@@ -157,10 +157,9 @@ public struct BibTeXTokenizer: Sendable {
                 range: startIndex..<nextIndex
             )
             
-            if context.expectingCitationKey {
-                context.expectingCitationKey = false
-                // Next non-whitespace token is the citation key
-            }
+            // Don't reset expectingCitationKey here - let the next word token handle it
+            // Reset expectingFieldValue so content inside braces is tokenized as text, not constant
+            context.expectingFieldValue = false
             
             context.braceDepth += 1
             return tokenInfo
@@ -213,11 +212,6 @@ public struct BibTeXTokenizer: Sendable {
         // Quoted string
         if first == "\"" {
             return consumeQuotedString(from: remaining, in: input, context: &context)
-        }
-        
-        // Braced string value
-        if first == "{" && context.expectingFieldValue {
-            return consumeBracedString(from: remaining, in: input, context: &context)
         }
         
         // LaTeX command
@@ -487,7 +481,7 @@ public struct BibTeXTokenizer: Sendable {
         }
         
         // Find closing delimiter
-        let delimiter = isDisplayMath ? "$$" : "$"
+        let _ = isDisplayMath ? "$$" : "$"
         var escaped = false
         
         while endIndex < remaining.endIndex {

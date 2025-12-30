@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-lightgrey.svg" alt="MIT License" />
 </p>
 
-![logo]()
+![logo](https://github.com/ezefranca/BibTeXKit/blob/main/.github/images/example1.png?raw=true)
 
 **BibTeXKit** is a modern, Swift-native framework for parsing, displaying, and manipulating BibTeX bibliographic data. Built with SwiftUI, it provides beautiful syntax highlighting and a highly customizable viewing experience across all Apple platforms.
 
@@ -16,7 +16,7 @@
 -  **Beautiful Syntax Highlighting** — 7 built-in themes including Monokai, Solarized, and Xcode styles
 -  **Responsive Design** — Adapts perfectly from Apple Watch to Mac
 -  **Highly Customizable** — Toggle copy buttons, line numbers, metadata, and more
--  **Complete BibTeX Support** — All 14 standard entry types plus custom types
+-  **Complete BibTeX Support** — All 17 standard entry types plus custom types
 -  **LaTeX Conversion** — Automatic LaTeX to Unicode conversion (ü → ü)
 -  **Quality API** — SwiftUI view modifiers that feel native
 - **100% Test Coverage** — Comprehensive test suite
@@ -167,7 +167,7 @@ struct MyCustomTheme: BibTeXTheme {
     func color(for token: BibTeXToken) -> Color {
         switch token {
         case .entryType: return Color(hex: "#ff6b6b")
-        case .key: return Color(hex: "#4ecdc4")
+        case .citationKey: return Color(hex: "#4ecdc4")
         case .fieldName: return Color(hex: "#45b7d1")
         case .string: return Color(hex: "#96ceb4")
         case .comment: return Color(hex: "#6c757d")
@@ -213,7 +213,7 @@ entry["author"]   // Same as entry.author
 entry["TITLE"]    // Case insensitive
 
 // Author parsing
-entry.authorList  // ["First Author", "Second Author"]
+entry.authors  // ["First Author", "Second Author"]
 
 // Validation
 let validation = entry.validate()
@@ -341,4 +341,6 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ## 🤖 AI Contributing
 
-AI contributing are welcome, on the PR add the model you used and the prompt to obtain that code.
+AI contributions are welcome! When submitting a PR, please add the model you used and the prompt to obtain that code.
+
+For AI agents looking to integrate with BibTeXKit, see the [Agent Guide](Agents.md) for comprehensive API documentation and usage patterns.
