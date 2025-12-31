@@ -117,6 +117,9 @@ public struct BibTeXTokenizer: Sendable {
         var expectingFieldValue = false
         var inStringValue = false
         var braceDepth = 0
+        /// Tracks depth inside field value braces (after = {)
+        /// When > 0, content should be treated as text, not constants
+        var fieldValueBraceDepth = 0
     }
     
     // MARK: - Private Methods
@@ -157,8 +160,16 @@ public struct BibTeXTokenizer: Sendable {
                 range: startIndex..<nextIndex
             )
             
+            // Track if we're entering a field value brace
+            if context.expectingFieldValue {
+                context.fieldValueBraceDepth = 1
+            } else if context.fieldValueBraceDepth > 0 {
+                // Nested brace inside field value
+                context.fieldValueBraceDepth += 1
+            }
+            
             // Don't reset expectingCitationKey here - let the next word token handle it
-            // Reset expectingFieldValue so content inside braces is tokenized as text, not constant
+            // Reset expectingFieldValue so unbraced constants after # are handled
             context.expectingFieldValue = false
             
             context.braceDepth += 1
@@ -169,6 +180,12 @@ public struct BibTeXTokenizer: Sendable {
         if (first == "}" || first == ")") && !context.inStringValue {
             let nextIndex = input.index(after: startIndex)
             context.braceDepth = max(0, context.braceDepth - 1)
+            
+            // Track exiting field value braces
+            if context.fieldValueBraceDepth > 0 {
+                context.fieldValueBraceDepth -= 1
+            }
+            
             return BibTeXTokenInfo(
                 token: .punctuation,
                 text: String(first),
@@ -214,9 +231,9 @@ public struct BibTeXTokenizer: Sendable {
             return consumeQuotedString(from: remaining, in: input, context: &context)
         }
         
-        // LaTeX command
+        // LaTeX command - tokenize with special highlighting only outside field value braces
         if first == "\\" {
-            return consumeLatexCommand(from: remaining, in: input)
+            return consumeLatexCommand(from: remaining, in: input, asText: context.fieldValueBraceDepth > 0)
         }
         
         // Math mode
@@ -224,8 +241,9 @@ public struct BibTeXTokenizer: Sendable {
             return consumeMathMode(from: remaining, in: input)
         }
         
-        // Number
-        if first.isNumber && context.expectingFieldValue {
+        // Number - only tokenize as number when expecting unbraced field value (like year = 2024)
+        // Inside braces, numbers are treated as text
+        if first.isNumber && context.expectingFieldValue && context.fieldValueBraceDepth == 0 {
             return consumeNumber(from: remaining, in: input, context: &context)
         }
         
@@ -372,7 +390,7 @@ public struct BibTeXTokenizer: Sendable {
         )
     }
     
-    private func consumeLatexCommand(from remaining: Substring, in input: String) -> BibTeXTokenInfo {
+    private func consumeLatexCommand(from remaining: Substring, in input: String, asText: Bool = false) -> BibTeXTokenInfo {
         guard remaining.first == "\\" else {
             let nextIndex = input.index(after: remaining.startIndex)
             return BibTeXTokenInfo(token: .text, text: "\\", range: remaining.startIndex..<nextIndex)
@@ -389,7 +407,7 @@ public struct BibTeXTokenizer: Sendable {
             if "\\&%$#_{}".contains(nextChar) {
                 endIndex = input.index(after: endIndex)
                 return BibTeXTokenInfo(
-                    token: .specialChar,
+                    token: asText ? .text : .specialChar,
                     text: String(remaining[startIndex..<endIndex]),
                     range: startIndex..<endIndex
                 )
@@ -418,7 +436,7 @@ public struct BibTeXTokenizer: Sendable {
                 }
                 
                 return BibTeXTokenInfo(
-                    token: .accent,
+                    token: asText ? .text : .accent,
                     text: String(remaining[startIndex..<endIndex]),
                     range: startIndex..<endIndex
                 )
@@ -437,6 +455,15 @@ public struct BibTeXTokenizer: Sendable {
         
         let text = String(remaining[startIndex..<endIndex])
         let commandName = String(text.dropFirst())
+        
+        // When inside field value braces, return as text
+        if asText {
+            return BibTeXTokenInfo(
+                token: .text,
+                text: text,
+                range: startIndex..<endIndex
+            )
+        }
         
         // Determine token type
         let token: BibTeXToken
@@ -562,7 +589,12 @@ public struct BibTeXTokenizer: Sendable {
         if context.expectingCitationKey {
             token = .citationKey
             context.expectingCitationKey = false
+        } else if context.fieldValueBraceDepth > 0 {
+            // Inside field value braces - treat as plain text
+            // (except for known constants which might still be useful to highlight)
+            token = .text
         } else if context.expectingFieldValue {
+            // Unbraced value after = (like month = jan)
             // Check if it's a known constant
             if Self.knownConstants.contains(word.lowercased()) {
                 token = .constant
