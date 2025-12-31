@@ -47,12 +47,12 @@ public struct BibTeXView: View {
     
     private let bibtex: String
     private let entry: BibTeXEntry?
+    private var configuration: BibTeXViewConfiguration
     
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     
-    @State private var configuration: BibTeXViewConfiguration
     @State private var copyFeedback = false
     @State private var contentSize: CGSize = .zero
     
@@ -66,7 +66,7 @@ public struct BibTeXView: View {
     public init(bibtex: String, configuration: BibTeXViewConfiguration = BibTeXViewConfiguration()) {
         self.bibtex = bibtex
         self.entry = nil
-        self._configuration = State(initialValue: configuration)
+        self.configuration = configuration
     }
     
     /// Creates a view displaying a parsed entry.
@@ -77,7 +77,7 @@ public struct BibTeXView: View {
     public init(entry: BibTeXEntry, configuration: BibTeXViewConfiguration = BibTeXViewConfiguration()) {
         self.entry = entry
         self.bibtex = entry.formatted(style: configuration.formattingStyle)
-        self._configuration = State(initialValue: configuration)
+        self.configuration = configuration
     }
     
     // MARK: - Body
@@ -169,7 +169,7 @@ public struct BibTeXView: View {
             ForEach(Array(lines.enumerated()), id: \.offset) { index, _ in
                 Text("\(index + 1)")
                     .font(theme.font)
-                    .foregroundStyle(theme.color(for: .number))
+                    .foregroundStyle(theme.lineNumberColor)
                     .lineSpacing(configuration.lineSpacing)
             }
         }
@@ -177,7 +177,7 @@ public struct BibTeXView: View {
         .padding(.trailing, 8)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(theme.color(for: .number).opacity(0.3))
+                .fill(theme.lineNumberColor.opacity(0.3))
                 .frame(width: 1)
         }
     }
@@ -340,99 +340,99 @@ extension BibTeXView {
     
     /// Sets the theme for syntax highlighting.
     public func bibTeXTheme(_ theme: any BibTeXTheme) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.explicitTheme = theme
+        var copy = self
+        copy.configuration.explicitTheme = theme
         return copy
     }
     
     /// Enables or disables line numbers.
     public func lineNumbers(_ enabled: Bool = true) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.showLineNumbers = enabled
+        var copy = self
+        copy.configuration.showLineNumbers = enabled
         return copy
     }
     
     /// Hides the copy button.
     public func copyButtonHidden(_ hidden: Bool = true) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.showCopyButton = !hidden
+        var copy = self
+        copy.configuration.showCopyButton = !hidden
         return copy
     }
     
     /// Sets the copy button position.
     public func copyButtonPosition(_ position: BibTeXViewConfiguration.CopyButtonPosition) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.copyButtonPosition = position
+        var copy = self
+        copy.configuration.copyButtonPosition = position
         return copy
     }
     
     /// Sets the copy button style.
     public func copyButtonStyle(_ style: BibTeXViewConfiguration.CopyButtonStyle) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.copyButtonStyle = style
+        var copy = self
+        copy.configuration.copyButtonStyle = style
         return copy
     }
     
     /// Shows or hides entry metadata.
     public func showMetadata(_ show: Bool = true) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.showMetadata = show
+        var copy = self
+        copy.configuration.showMetadata = show
         return copy
     }
     
     /// Sets the BibTeX formatting style.
     public func formattingStyle(_ style: BibTeXEntry.FormattingStyle) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.formattingStyle = style
+        var copy = self
+        copy.configuration.formattingStyle = style
         return copy
     }
     
     /// Sets the maximum height before scrolling.
     public func maxHeight(_ height: CGFloat?) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.maxHeight = height
+        var copy = self
+        copy.configuration.maxHeight = height
         return copy
     }
     
     /// Sets the minimum height.
     public func minHeight(_ height: CGFloat?) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.minHeight = height
+        var copy = self
+        copy.configuration.minHeight = height
         return copy
     }
     
     /// Sets the corner radius.
     public func cornerRadius(_ radius: CGFloat) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.cornerRadius = radius
+        var copy = self
+        copy.configuration.cornerRadius = radius
         return copy
     }
     
     /// Shows or hides the border.
     public func bordered(_ bordered: Bool = true) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.showBorder = bordered
+        var copy = self
+        copy.configuration.showBorder = bordered
         return copy
     }
     
     /// Enables or disables text selection.
     public func textSelection(_ enabled: Bool) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.enableTextSelection = enabled
+        var copy = self
+        copy.configuration.enableTextSelection = enabled
         return copy
     }
     
     /// Sets content padding.
     public func contentPadding(_ padding: EdgeInsets) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.contentPadding = padding
+        var copy = self
+        copy.configuration.contentPadding = padding
         return copy
     }
     
     /// Sets content padding with uniform value.
     public func contentPadding(_ value: CGFloat) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue.contentPadding = EdgeInsets(
+        var copy = self
+        copy.configuration.contentPadding = EdgeInsets(
             top: value, leading: value, bottom: value, trailing: value
         )
         return copy
@@ -440,8 +440,8 @@ extension BibTeXView {
     
     /// Applies a preset configuration.
     public func preset(_ preset: BibTeXViewConfiguration) -> Self {
-        let copy = self
-        copy._configuration.wrappedValue = preset
+        var copy = self
+        copy.configuration = preset
         return copy
     }
 }
