@@ -328,6 +328,14 @@ swift test --enable-code-coverage
 
 BibTeXKit is available under the MIT license. See the [LICENSE](LICENSE) file for details.
 
+## 🧩 Used in Production
+
+BibTeXKit is used in **Auctorium**, a native iOS and macOS app for academic workflow management (submissions, venues, citations, and research artifacts).
+
+- App website: https://auctorium.app  
+
+The library powers BibTeX parsing, formatting, and display inside real-world research tooling.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a PR.
