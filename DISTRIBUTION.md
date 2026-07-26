@@ -6,7 +6,7 @@ XCFramework for projects that embed precompiled frameworks directly.
 
 ## Swift Package Manager
 
-After `v1.1.0` is published, add the same repository for either linkage model:
+Add the same repository for either linkage model:
 
 ```swift
 dependencies: [

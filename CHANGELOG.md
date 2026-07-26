@@ -2,7 +2,7 @@
 
 All notable changes to BibTeXKit are documented in this file.
 
-## 1.1.0 - Unreleased
+## 1.1.0 - 2026-07-26
 
 ### Added
 

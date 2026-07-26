@@ -7,13 +7,13 @@ security-relevant when they cross an application's trust boundary.
 
 ## Supported versions
 
-Formal security support begins with 1.1.0. After that release, fixes are made
-against the latest published minor version. The unreleased default branch is
-development software, and 1.0.x does not receive a compatibility guarantee.
+Formal security support begins with 1.1.0. Fixes are made against the latest
+published minor version. The default branch may contain unreleased development
+work, and 1.0.x does not receive a compatibility guarantee.
 
 | Version | Status |
 |---|---|
-| 1.1.x | Supported after `v1.1.0` is published |
+| 1.1.x | Supported |
 | 1.0.x | No formal security-support commitment |
 | Unreleased source | Evaluated for the next release |
 

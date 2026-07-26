@@ -64,10 +64,8 @@ dependencies.
 
 ## Installation
 
-The following dependency declaration targets the forthcoming 1.1.0 release.
-After its tag is published, add
-`https://github.com/ezefranca/BibTeXKit.git` in Xcode, or declare the package
-directly:
+Add `https://github.com/ezefranca/BibTeXKit.git` in Xcode, or declare the
+package directly:
 
 ```swift
 dependencies: [

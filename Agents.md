@@ -1,8 +1,8 @@
 # BibTeXKit API quick reference
 
-Use this public reference when writing integrations against the unreleased
-1.1.0 source. The README explains product and integration decisions; this file
-concentrates on API behavior and concise, copyable examples.
+Use this public reference when writing integrations against BibTeXKit 1.1.0.
+The README explains product and integration decisions; this file concentrates
+on API behavior and concise, copyable examples.
 
 ## Requirements
 
