@@ -18,15 +18,21 @@ public struct BibTeXViewConfiguration: Sendable {
     public var showLineNumbers: Bool
     
     /// Whether to show the copy button.
+    ///
+    /// Copy controls are unavailable on watchOS and tvOS.
     public var showCopyButton: Bool
     
     /// Whether to show entry metadata (type, key info).
     public var showMetadata: Bool
     
     /// Whether to enable text selection.
+    ///
+    /// This setting is ignored on watchOS and tvOS.
     public var enableTextSelection: Bool
     
-    /// The formatting style for the BibTeX.
+    /// The formatting style used for parsed entries.
+    ///
+    /// Raw input supplied to `BibTeXView` is unchanged.
     public var formattingStyle: BibTeXEntry.FormattingStyle
     
     /// Maximum height before scrolling (nil for unbounded).
@@ -37,7 +43,9 @@ public struct BibTeXViewConfiguration: Sendable {
     
     // MARK: - Theme Options
     
-    /// Whether to automatically adapt to system color scheme.
+    /// Whether to select `darkTheme` in dark mode.
+    ///
+    /// When false, `lightTheme` is used unless `explicitTheme` is set.
     public var adaptToColorScheme: Bool
     
     /// Light theme to use when `adaptToColorScheme` is true.
@@ -57,7 +65,7 @@ public struct BibTeXViewConfiguration: Sendable {
     /// Corner radius for the container.
     public var cornerRadius: CGFloat
     
-    /// Line spacing multiplier.
+    /// Additional spacing, in points, inserted between lines.
     public var lineSpacing: CGFloat
     
     /// Whether to show a border.
@@ -193,12 +201,53 @@ public struct BibTeXViewConfiguration: Sendable {
 // MARK: - Theme Resolution
 
 extension BibTeXViewConfiguration {
+    var renderedMinimumHeight: CGFloat? {
+        Self.nonnegativeFiniteDimension(minHeight)
+    }
+
+    var renderedMaximumHeight: CGFloat? {
+        Self.nonnegativeFiniteDimension(maxHeight)
+    }
+
+    var renderedCornerRadius: CGFloat {
+        Self.nonnegativeFiniteDimension(cornerRadius) ?? 0
+    }
+
+    var renderedLineSpacing: CGFloat {
+        lineSpacing.isFinite ? lineSpacing : 0
+    }
+
+    var renderedBorderWidth: CGFloat {
+        Self.nonnegativeFiniteDimension(borderWidth) ?? 0
+    }
+
+    var renderedContentPadding: EdgeInsets {
+        EdgeInsets(
+            top: Self.finiteValue(contentPadding.top),
+            leading: Self.finiteValue(contentPadding.leading),
+            bottom: Self.finiteValue(contentPadding.bottom),
+            trailing: Self.finiteValue(contentPadding.trailing)
+        )
+    }
     
     /// Returns the appropriate theme for the given color scheme.
     public func theme(for colorScheme: ColorScheme) -> any BibTeXTheme {
         if let explicit = explicitTheme {
-            return explicit
+            return explicit.resolved(for: colorScheme)
         }
-        return colorScheme == .dark ? darkTheme : lightTheme
+
+        let theme = adaptToColorScheme && colorScheme == .dark
+            ? darkTheme
+            : lightTheme
+        return theme.resolved(for: colorScheme)
+    }
+
+    private static func nonnegativeFiniteDimension(_ value: CGFloat?) -> CGFloat? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return value
+    }
+
+    private static func finiteValue(_ value: CGFloat) -> CGFloat {
+        value.isFinite ? value : 0
     }
 }

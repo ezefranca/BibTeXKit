@@ -15,8 +15,10 @@ import SwiftUI
 /// ## Usage
 ///
 /// ```swift
-/// BibTeXText(bibtex: myBibTeXString)
-///     .font(.system(.body, design: .monospaced))
+/// BibTeXText(
+///     bibtex: myBibTeXString,
+///     theme: MonokaiTheme()
+/// )
 /// ```
 ///
 /// For richer UI with copy buttons and metadata, use ``BibTeXView``.
@@ -58,12 +60,20 @@ public struct BibTeXText: View {
     
     // MARK: - Body
     
+    @ViewBuilder
     public var body: some View {
-        let effectiveTheme = theme ?? (colorScheme == .dark ? DefaultDarkTheme() : DefaultLightTheme())
+        let baseTheme = theme ?? (colorScheme == .dark ? DefaultDarkTheme() : DefaultLightTheme())
+        let effectiveTheme = baseTheme.resolved(for: colorScheme)
         let highlighter = BibTeXHighlighter(theme: effectiveTheme)
-        
+
+        #if os(iOS) || os(macOS) || os(visionOS)
         Text(highlighter.highlight(bibtex))
             .textSelection(.enabled)
+            .tint(effectiveTheme.selectionColor)
+        #else
+        Text(highlighter.highlight(bibtex))
+            .tint(effectiveTheme.selectionColor)
+        #endif
     }
 }
 
@@ -80,31 +90,29 @@ extension BibTeXText {
 // MARK: - Preview
 
 #if DEBUG
-struct BibTeXText_Previews: PreviewProvider {
-    static let sampleBibTeX = """
+private let bibTeXTextPreviewSample = """
     @article{sample2024,
         author = {John Doe},
         title = {Sample Paper},
         year = {2024}
     }
     """
-    
-    static var previews: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Inline BibTeX:")
-                .font(.headline)
-            
-            BibTeXText(bibtex: sampleBibTeX)
-            
-            Divider()
-            
-            Text("With Monokai theme:")
-                .font(.headline)
-            
-            BibTeXText(bibtex: sampleBibTeX)
-                .bibTeXTheme(MonokaiTheme())
-        }
-        .padding()
+
+#Preview("Inline themes") {
+    VStack(alignment: .leading, spacing: 20) {
+        Text("Inline BibTeX:")
+            .font(.headline)
+
+        BibTeXText(bibtex: bibTeXTextPreviewSample)
+
+        Divider()
+
+        Text("With Monokai theme:")
+            .font(.headline)
+
+        BibTeXText(bibtex: bibTeXTextPreviewSample)
+            .bibTeXTheme(MonokaiTheme())
     }
+    .padding()
 }
 #endif

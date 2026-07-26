@@ -24,8 +24,8 @@ import SwiftUI
 ///
 /// ## Thread Safety
 ///
-/// `BibTeXHighlighter` is fully thread-safe and can be used
-/// from any thread or actor context.
+/// `BibTeXHighlighter` is a `Sendable` value whose tokenizer and theme keep
+/// no mutable shared state.
 public struct BibTeXHighlighter: Sendable {
     
     // MARK: - Properties
@@ -45,7 +45,8 @@ public struct BibTeXHighlighter: Sendable {
         self.theme = theme
     }
     
-    /// Creates a highlighter that adapts to the color scheme.
+    /// Creates a highlighter using the default theme selected for the supplied
+    /// color scheme.
     ///
     /// - Parameter colorScheme: The current color scheme.
     public init(colorScheme: ColorScheme) {
@@ -61,25 +62,37 @@ public struct BibTeXHighlighter: Sendable {
     public func highlight(_ bibtex: String) -> AttributedString {
         guard !bibtex.isEmpty else { return AttributedString() }
         
-        let tokens = tokenizer.tokenize(bibtex)
-        var result = AttributedString()
+        var result = AttributedString(bibtex)
+        let baseFont = theme.font
+        result.font = baseFont
+        result.foregroundColor = theme.textColor
         
-        for tokenInfo in tokens {
-            var attributed = AttributedString(tokenInfo.text)
-            attributed.font = theme.font
-            attributed.foregroundColor = theme.color(for: tokenInfo.token)
+        tokenizer.scanTokens(in: bibtex) { token, sourceRange in
+            guard token != .whitespace,
+                  token != .text,
+                  let lowerBound = AttributedString.Index(
+                    sourceRange.lowerBound,
+                    within: result
+                  ),
+                  let upperBound = AttributedString.Index(
+                    sourceRange.upperBound,
+                    within: result
+                  )
+            else {
+                return
+            }
+
+            let range = lowerBound..<upperBound
+            result[range].foregroundColor = theme.color(for: token)
             
-            // Apply additional styling
-            switch tokenInfo.token {
+            switch token {
             case .entryType, .special:
-                attributed.font = theme.font.bold()
+                result[range].font = baseFont.bold()
             case .comment:
-                attributed.font = theme.font.italic()
+                result[range].font = baseFont.italic()
             default:
                 break
             }
-            
-            result.append(attributed)
         }
         
         return result

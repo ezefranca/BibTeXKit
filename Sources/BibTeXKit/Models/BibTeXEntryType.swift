@@ -26,7 +26,7 @@ import Foundation
 /// For non-standard types, use the ``custom(_:)`` case:
 ///
 /// ```swift
-/// let dataset = BibTeXEntryType.custom("dataset")
+/// let patent = BibTeXEntryType.custom("patent")
 /// ```
 public enum BibTeXEntryType: Hashable, Sendable {
     
@@ -50,7 +50,10 @@ public enum BibTeXEntryType: Hashable, Sendable {
     /// An article in conference proceedings.
     case inproceedings
     
-    /// An article in conference proceedings (alias for inproceedings).
+    /// A conference paper.
+    ///
+    /// This case uses the same field metadata as ``inproceedings`` but remains
+    /// a distinct enum case.
     case conference
     
     /// Technical documentation.
@@ -85,6 +88,39 @@ public enum BibTeXEntryType: Hashable, Sendable {
     
     /// A custom or unknown entry type.
     case custom(String)
+
+    private enum HashDomain: Hashable {
+        case standard
+        case custom
+    }
+
+    // MARK: - Equality and Hashing
+
+    /// Compares custom entry types using BibTeX's case-insensitive type
+    /// semantics while keeping standard and explicitly custom cases distinct.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case let (.custom(lhsValue), .custom(rhsValue)):
+            lhsValue.lowercased() == rhsValue.lowercased()
+        case (.custom, _), (_, .custom):
+            false
+        default:
+            lhs.rawValue == rhs.rawValue
+        }
+    }
+
+    /// Hashes custom entry types using the same case-insensitive identity used
+    /// by ``==(_:_:)``.
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .custom(let value):
+            hasher.combine(HashDomain.custom)
+            hasher.combine(value.lowercased())
+        default:
+            hasher.combine(HashDomain.standard)
+            hasher.combine(rawValue)
+        }
+    }
     
     // MARK: - Initialization
     
@@ -184,91 +220,251 @@ public enum BibTeXEntryType: Hashable, Sendable {
     }
     
     /// The required fields for this entry type.
+    ///
+    /// This set contains fields that are unconditionally required. See
+    /// ``requiredFieldAlternatives`` for requirements where any one field in
+    /// a group is sufficient.
     public var requiredFields: Set<String> {
         switch self {
         case .article:
-            return ["author", "title", "journal", "year"]
+            return FieldMetadata.articleRequired
         case .book:
-            return ["author", "title", "publisher", "year"]
+            return FieldMetadata.bookRequired
         case .booklet:
-            return ["title"]
+            return FieldMetadata.bookletRequired
         case .inbook:
-            return ["author", "title", "chapter", "publisher", "year"]
+            return FieldMetadata.inbookRequired
         case .incollection:
-            return ["author", "title", "booktitle", "publisher", "year"]
+            return FieldMetadata.incollectionRequired
         case .inproceedings, .conference:
-            return ["author", "title", "booktitle", "year"]
+            return FieldMetadata.inproceedingsRequired
         case .manual:
-            return ["title"]
+            return FieldMetadata.manualRequired
         case .mastersthesis, .phdthesis:
-            return ["author", "title", "school", "year"]
+            return FieldMetadata.thesisRequired
         case .proceedings:
-            return ["title", "year"]
+            return FieldMetadata.proceedingsRequired
         case .techreport:
-            return ["author", "title", "institution", "year"]
+            return FieldMetadata.techreportRequired
         case .unpublished:
-            return ["author", "title", "note"]
+            return FieldMetadata.unpublishedRequired
         case .misc, .online, .software, .dataset, .custom:
-            return []
+            return FieldMetadata.none
+        }
+    }
+
+    /// Groups of interchangeable required fields.
+    ///
+    /// An entry satisfies a group when at least one non-empty field in that
+    /// group is present. Standard BibTeX permits `author` or `editor` for a
+    /// book, and additionally permits `chapter` or `pages` for an in-book
+    /// entry.
+    public var requiredFieldAlternatives: [Set<String>] {
+        switch self {
+        case .book:
+            return FieldMetadata.bookRequiredAlternatives
+        case .inbook:
+            return FieldMetadata.inbookRequiredAlternatives
+        default:
+            return FieldMetadata.noAlternatives
         }
     }
     
     /// The optional fields for this entry type.
+    ///
+    /// Classic types include BibTeX's `key` fallback field. The special
+    /// `crossref` inheritance directive is intentionally excluded because
+    /// entry-local validation does not resolve relationships between entries.
     public var optionalFields: Set<String> {
         switch self {
         case .article:
-            return ["volume", "number", "pages", "month", "doi", "url", "note", "abstract", "keywords"]
+            return FieldMetadata.articleOptional
         case .book:
-            return ["volume", "number", "series", "address", "edition", "month", "doi", "url", "note", "abstract", "keywords", "editor"]
+            return FieldMetadata.bookOptional
         case .booklet:
-            return ["author", "howpublished", "address", "month", "year", "note"]
+            return FieldMetadata.bookletOptional
         case .inbook:
-            return ["volume", "number", "series", "type", "address", "edition", "month", "pages", "note"]
+            return FieldMetadata.inbookOptional
         case .incollection:
-            return ["editor", "volume", "number", "series", "type", "chapter", "pages", "address", "edition", "month", "note"]
+            return FieldMetadata.incollectionOptional
         case .inproceedings, .conference:
-            return ["editor", "volume", "number", "series", "pages", "address", "month", "organization", "publisher", "note"]
+            return FieldMetadata.inproceedingsOptional
         case .manual:
-            return ["author", "organization", "address", "edition", "month", "year", "note"]
+            return FieldMetadata.manualOptional
         case .mastersthesis, .phdthesis:
-            return ["type", "address", "month", "note"]
+            return FieldMetadata.thesisOptional
         case .proceedings:
-            return ["editor", "volume", "number", "series", "address", "month", "organization", "publisher", "note"]
+            return FieldMetadata.proceedingsOptional
         case .techreport:
-            return ["type", "number", "address", "month", "note"]
+            return FieldMetadata.techreportOptional
         case .unpublished:
-            return ["month", "year"]
+            return FieldMetadata.unpublishedOptional
         case .misc:
-            return ["author", "title", "howpublished", "month", "year", "note", "url"]
+            return FieldMetadata.miscOptional
         case .online:
-            return ["author", "title", "url", "urldate", "year", "month", "note"]
+            return FieldMetadata.onlineOptional
         case .software:
-            return ["author", "title", "url", "version", "year", "month", "note"]
+            return FieldMetadata.softwareOptional
         case .dataset:
-            return ["author", "title", "url", "year", "publisher", "version", "note"]
+            return FieldMetadata.datasetOptional
         case .custom:
-            return []
+            return FieldMetadata.none
         }
     }
     
     /// All known standard entry types.
-    public static var allStandardTypes: [BibTeXEntryType] {
+    public static let allStandardTypes: [BibTeXEntryType] = {
         [.article, .book, .booklet, .inbook, .incollection, .inproceedings,
          .conference, .manual, .mastersthesis, .phdthesis, .proceedings,
          .techreport, .unpublished, .misc, .online, .software, .dataset]
+    }()
+
+    /// A stable discriminator used to provide deterministic entry ordering.
+    internal var sortingRank: Int {
+        switch self {
+        case .article: 0
+        case .book: 1
+        case .booklet: 2
+        case .inbook: 3
+        case .incollection: 4
+        case .inproceedings: 5
+        case .conference: 6
+        case .manual: 7
+        case .mastersthesis: 8
+        case .phdthesis: 9
+        case .proceedings: 10
+        case .techreport: 11
+        case .unpublished: 12
+        case .misc: 13
+        case .online: 14
+        case .software: 15
+        case .dataset: 16
+        case .custom: 17
+        }
+    }
+}
+
+// MARK: - Field Metadata
+
+private extension BibTeXEntryType {
+    /// Shared immutable sets avoid rebuilding hash tables for every validation.
+    enum FieldMetadata {
+        static let none: Set<String> = []
+
+        static let articleRequired: Set<String> = ["author", "title", "journal", "year"]
+        static let bookRequired: Set<String> = ["title", "publisher", "year"]
+        static let bookletRequired: Set<String> = ["title"]
+        static let inbookRequired: Set<String> = ["title", "publisher", "year"]
+        static let incollectionRequired: Set<String> = ["author", "title", "booktitle", "publisher", "year"]
+        static let inproceedingsRequired: Set<String> = ["author", "title", "booktitle", "year"]
+        static let manualRequired: Set<String> = ["title"]
+        static let thesisRequired: Set<String> = ["author", "title", "school", "year"]
+        static let proceedingsRequired: Set<String> = ["title", "year"]
+        static let techreportRequired: Set<String> = ["author", "title", "institution", "year"]
+        static let unpublishedRequired: Set<String> = ["author", "title", "note"]
+
+        static let noAlternatives: [Set<String>] = []
+        static let bookRequiredAlternatives: [Set<String>] = [
+            ["author", "editor"]
+        ]
+        static let inbookRequiredAlternatives: [Set<String>] = [
+            ["author", "editor"],
+            ["chapter", "pages"]
+        ]
+
+        static let articleOptional: Set<String> = [
+            "volume", "number", "pages", "month", "doi", "url", "note",
+            "abstract", "keywords", "key"
+        ]
+        static let bookOptional: Set<String> = [
+            "volume", "number", "series", "address", "edition", "month",
+            "doi", "url", "note", "abstract", "keywords", "key"
+        ]
+        static let bookletOptional: Set<String> = [
+            "author", "howpublished", "address", "month", "year", "note", "key"
+        ]
+        static let inbookOptional: Set<String> = [
+            "volume", "number", "series", "type", "address", "edition",
+            "month", "note", "key"
+        ]
+        static let incollectionOptional: Set<String> = [
+            "editor", "volume", "number", "series", "type", "chapter",
+            "pages", "address", "edition", "month", "note", "key"
+        ]
+        static let inproceedingsOptional: Set<String> = [
+            "editor", "volume", "number", "series", "pages", "address",
+            "month", "organization", "publisher", "note", "key"
+        ]
+        static let manualOptional: Set<String> = [
+            "author", "organization", "address", "edition", "month", "year",
+            "note", "key"
+        ]
+        static let thesisOptional: Set<String> = [
+            "type", "address", "month", "note", "key"
+        ]
+        static let proceedingsOptional: Set<String> = [
+            "editor", "volume", "number", "series", "address", "month",
+            "organization", "publisher", "note", "key"
+        ]
+        static let techreportOptional: Set<String> = [
+            "type", "number", "address", "month", "note", "key"
+        ]
+        static let unpublishedOptional: Set<String> = [
+            "month", "year", "key"
+        ]
+        static let miscOptional: Set<String> = [
+            "author", "title", "howpublished", "month", "year", "note", "url",
+            "key"
+        ]
+        static let onlineOptional: Set<String> = [
+            "author", "title", "url", "urldate", "year", "month", "note"
+        ]
+        static let softwareOptional: Set<String> = [
+            "author", "title", "url", "version", "year", "month", "note"
+        ]
+        static let datasetOptional: Set<String> = [
+            "author", "title", "url", "year", "publisher", "version", "note"
+        ]
     }
 }
 
 // MARK: - Codable
 
 extension BibTeXEntryType: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case custom
+    }
+
     public init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: CodingKeys.self),
+           let customValue = try container.decodeIfPresent(
+            String.self,
+            forKey: .custom
+           ) {
+            self = .custom(customValue)
+            return
+        }
+
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
         self.init(rawValue: rawValue)
     }
     
     public func encode(to encoder: Encoder) throws {
+        if case .custom(let value) = self,
+           case .custom = BibTeXEntryType(rawValue: value) {
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+            return
+        } else if case .custom(let value) = self {
+            // A tagged representation preserves an explicitly custom case
+            // whose spelling collides with a standard type. Legacy strings
+            // continue to decode as their standard case.
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(value, forKey: .custom)
+            return
+        }
+
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }

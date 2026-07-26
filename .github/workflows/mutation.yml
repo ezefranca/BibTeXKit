@@ -1,0 +1,99 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: "17 2 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      no_cache:
+        description: Ignore cached mutation outcomes (recommended before release)
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      no_cache:
+        description: Ignore cached mutation outcomes
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-testing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  SWIFT_DETERMINISTIC_HASHING: "1"
+  MUTATION_TOOL_COMMIT: 8d8d03e28f06665c3fc6f36ccdc7cac244a584f6
+  MUTATION_SWIFT_SYNTAX_COMMIT: 79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1
+
+jobs:
+  mutation:
+    name: Core mutation quality
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Fetch pinned swift-mutation-testing source
+        env:
+          TOOL_ROOT: ${{ runner.temp }}/swift-mutation-testing
+        run: |
+          git init "${TOOL_ROOT}"
+          git -C "${TOOL_ROOT}" remote add origin \
+            https://github.com/ericodx/swift-mutation-testing.git
+          git -C "${TOOL_ROOT}" fetch --depth 1 origin "${MUTATION_TOOL_COMMIT}"
+          git -C "${TOOL_ROOT}" checkout --detach FETCH_HEAD
+          test "$(git -C "${TOOL_ROOT}" rev-parse HEAD)" = "${MUTATION_TOOL_COMMIT}"
+          echo "MUTATION_TOOL_ROOT=${TOOL_ROOT}" >> "${GITHUB_ENV}"
+
+      - name: Restore mutation-tool build cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/swift-mutation-testing/.build
+          key: mutation-tool-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-8d8d03e28f06665c3fc6f36ccdc7cac244a584f6-79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1
+
+      - name: Pin mutation-tool dependencies
+        run: |
+          swift package --package-path "${MUTATION_TOOL_ROOT}" resolve \
+            swift-syntax \
+            --revision "${MUTATION_SWIFT_SYNTAX_COMMIT}"
+          grep -Fq "${MUTATION_SWIFT_SYNTAX_COMMIT}" \
+            "${MUTATION_TOOL_ROOT}/Package.resolved"
+
+      - name: Build mutation tool
+        run: >-
+          swift build
+          --package-path "${MUTATION_TOOL_ROOT}"
+          --configuration release
+          --disable-automatic-resolution
+
+      - name: Restore mutation-result cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .swift-mutation-testing-cache
+          key: mutation-results-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-8d8d03e28f06665c3fc6f36ccdc7cac244a584f6-${{ hashFiles('.swift-mutation-testing.yml', 'Package.swift', 'Package.resolved', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
+
+      - name: Run and enforce mutation testing
+        env:
+          MUTATION_TESTING_BIN: ${{ runner.temp }}/swift-mutation-testing/.build/release/swift-mutation-testing
+          MUTATION_NO_CACHE: ${{ inputs.no_cache && '1' || '0' }}
+          MUTATION_REPORT_DIR: ${{ github.workspace }}/mutation-artifacts
+        run: Scripts/mutation.sh
+
+      - name: Publish mutation reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mutation-report
+          path: mutation-artifacts
+          if-no-files-found: warn
+          retention-days: 30

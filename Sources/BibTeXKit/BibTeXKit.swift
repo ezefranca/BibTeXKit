@@ -7,33 +7,30 @@
 //  Copyright © 2025. MIT License.
 //
 
-import Foundation
-
-/// BibTeXKit is a Swift framework for working with BibTeX data.
+/// Release metadata for the BibTeXKit framework.
 ///
-/// BibTeXKit provides comprehensive tools for parsing, formatting, and
-/// displaying BibTeX entries with beautiful syntax highlighting.
+/// Most clients never need this namespace; import `BibTeXKit` and use its
+/// parser, model, highlighting, and SwiftUI APIs directly.
 ///
-/// ## Overview
+/// ## Framework Overview
 ///
 /// BibTeXKit offers:
 /// - **Parsing**: Convert raw BibTeX strings into structured data
 /// - **Formatting**: Generate properly formatted BibTeX output
-/// - **Highlighting**: Beautiful syntax highlighting with customizable themes
-/// - **Views**: SwiftUI views that work on all Apple platforms
+/// - **Highlighting**: Apply syntax highlighting with configurable themes
+/// - **Views**: Present BibTeX in SwiftUI across the supported platforms
 ///
 /// ## Quick Start
 ///
 /// ```swift
 /// import BibTeXKit
 ///
-/// // Parse a BibTeX string
-/// let entry = try BibTeXParser.parse(bibtexString).first
-///
-/// // Display with syntax highlighting
-/// BibTeXView(entry)
-///     .bibTeXStyle(.compact)
-///     .copyButtonHidden()
+/// let entries = try BibTeXParser.parse(bibtexString)
+/// if let entry = entries.first {
+///     BibTeXView(entry: entry)
+///         .formattingStyle(.compact)
+///         .copyButtonHidden()
+/// }
 /// ```
 ///
 /// ## Topics
@@ -49,11 +46,8 @@ import Foundation
 /// ### Theming
 /// - ``BibTeXTheme``
 /// - ``BibTeXHighlighter``
-public enum BibTeXKit {
-    
+public enum BibTeXKitMetadata {
+
     /// The current version of BibTeXKit.
-    public static let version = "1.0.0"
-    
-    /// The bundle identifier.
-    public static let bundleIdentifier = "com.bibtexkit.framework"
+    public static let version = "1.1.0"
 }

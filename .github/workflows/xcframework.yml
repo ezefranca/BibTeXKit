@@ -1,0 +1,177 @@
+name: XCFramework Distribution
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "release/**"
+    tags:
+      - "v*.*.*"
+      - "*.*.*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xcframework-distribution-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  SWIFT_DETERMINISTIC_HASHING: "1"
+
+jobs:
+  release-quality:
+    name: Verify tagged source
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/build.yml
+
+  release-mutation:
+    name: Verify tagged mutation quality
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/mutation.yml
+    with:
+      no_cache: true
+
+  build-and-validate:
+    name: Build and validate XCFramework
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify toolchain and distribution scripts
+        run: |
+          xcodebuild -version
+          swift --version
+          bash -n Scripts/build_xcframework.sh Scripts/validate_distribution.sh
+          python3 -m unittest discover -s Scripts/Tests -p 'test_*.py'
+
+      - name: Run release tests with warnings as errors
+        if: github.ref_type == 'tag'
+        run: >-
+          swift test
+          --scratch-path "${{ runner.temp }}/release-tests"
+          --configuration release
+          -Xswiftc -warnings-as-errors
+
+      - name: Resolve release identity
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          source_version="$(
+            sed -nE \
+              's/.*static let version = "([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' \
+              Sources/BibTeXKit/BibTeXKit.swift
+          )"
+          test -n "${source_version}"
+          if [[ "${REF_TYPE}" == "tag" ]]; then
+            release_tag="${REF_NAME}"
+            version="${release_tag#v}"
+            test "${version}" = "${source_version}"
+          else
+            version="${source_version}"
+            release_tag="v${version}"
+          fi
+          artifact_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/BibTeXKit.xcframework.zip"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_url=${artifact_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build complete XCFramework
+        run: |
+          Scripts/build_xcframework.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --platforms all \
+            --output "${{ runner.temp }}/Build/BibTeXKit.xcframework"
+
+      - name: Create deterministic release archive
+        run: |
+          python3 Scripts/package_xcframework.py \
+            --xcframework "${{ runner.temp }}/Build/BibTeXKit.xcframework" \
+            --output-directory "${{ runner.temp }}/Distribution" \
+            --version "${{ steps.version.outputs.version }}" \
+            --artifact-url "${{ steps.version.outputs.artifact_url }}" \
+            --platforms all
+          computed_checksum="$(
+            swift package compute-checksum \
+              "${{ runner.temp }}/Distribution/BibTeXKit.xcframework.zip"
+          )"
+          recorded_checksum="$(
+            tr -d '[:space:]' \
+              < "${{ runner.temp }}/Distribution/BibTeXKit.xcframework.checksum"
+          )"
+          test "${computed_checksum}" = "${recorded_checksum}"
+
+      - name: Validate automatic, dynamic, and XCFramework consumers
+        run: |
+          Scripts/validate_distribution.sh \
+            --xcframework "${{ runner.temp }}/Build/BibTeXKit.xcframework" \
+            --platforms all
+
+      - name: Publish workflow artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: BibTeXKit-${{ steps.version.outputs.version }}-distribution
+          path: ${{ runner.temp }}/Distribution
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    name: Publish tagged release assets
+    if: github.ref_type == 'tag'
+    needs:
+      - build-and-validate
+      - release-quality
+      - release-mutation
+    runs-on: macos-26
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download validated distribution
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: BibTeXKit-*-distribution
+          path: distribution
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" \
+              --verify-tag \
+              --title "BibTeXKit ${RELEASE_TAG#v}" \
+              --generate-notes
+          fi
+          for asset in \
+            BibTeXKit.xcframework.zip \
+            BibTeXKit.xcframework.checksum \
+            release-metadata.json
+          do
+            if gh release view "${RELEASE_TAG}" \
+              --json assets \
+              --jq '.assets[].name' | grep -Fxq "${asset}"
+            then
+              echo "Release asset already exists and will not be overwritten: ${asset}" >&2
+              exit 1
+            fi
+          done
+          gh release upload "${RELEASE_TAG}" \
+            distribution/BibTeXKit.xcframework.zip \
+            distribution/BibTeXKit.xcframework.checksum \
+            distribution/release-metadata.json

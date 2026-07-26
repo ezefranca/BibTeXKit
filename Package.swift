@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 
 import PackageDescription
 
@@ -16,17 +16,22 @@ let package = Package(
             name: "BibTeXKit",
             targets: ["BibTeXKit"]
         ),
+        .library(
+            name: "BibTeXKitDynamic",
+            type: .dynamic,
+            targets: ["BibTeXKit"]
+        ),
     ],
     targets: [
-        .target(
-            name: "BibTeXKit",
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
-            ]
-        ),
+        .target(name: "BibTeXKit"),
         .testTarget(
             name: "BibTeXKitTests",
             dependencies: ["BibTeXKit"]
         ),
-    ]
+        .testTarget(
+            name: "BibTeXKitPerformanceTests",
+            dependencies: ["BibTeXKit"]
+        ),
+    ],
+    swiftLanguageModes: [.v6]
 )

@@ -5,8 +5,6 @@
 //  Copyright © 2025. MIT License.
 //
 
-import Foundation
-
 /// A token recognized by the BibTeX tokenizer.
 ///
 /// These tokens represent the syntactic elements of BibTeX and LaTeX
@@ -42,7 +40,8 @@ public enum BibTeXToken: String, Sendable, CaseIterable, Hashable {
     /// Special directives (@preamble, @string, @comment)
     case special
     
-    /// String constant reference (e.g., jan, feb for months)
+    /// A bare string-constant reference, such as a month abbreviation or a
+    /// name declared by `@string`.
     case constant
     
     // MARK: - LaTeX Tokens
@@ -53,7 +52,7 @@ public enum BibTeXToken: String, Sendable, CaseIterable, Hashable {
     /// LaTeX math mode ($...$)
     case math
     
-    /// LaTeX environment (\begin{...} ... \end{...})
+    /// A `\begin{…}` or `\end{…}` environment command.
     case environment
     
     /// LaTeX accent commands (\'e, \"{o}, etc.)

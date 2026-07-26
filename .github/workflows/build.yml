@@ -1,26 +1,165 @@
-name: Build and Test
+name: Build, Test, and Coverage
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - develop
+      - "release/**"
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-test-coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # GitHub's macOS 26 image includes this supported Xcode release and its
+  # Swift 6.3 toolchain. Keeping it explicit avoids runner-default drift.
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  SWIFT_DETERMINISTIC_HASHING: "1"
 
 jobs:
-  build:
-    runs-on: macos-15
-    permissions:
-      contents: read
-    
+  test-and-coverage:
+    name: Tests and coverage
+    runs-on: macos-26
+    timeout-minutes: 30
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: "6.2"
-    
-    - name: Build
-      run: swift build -v
-      
-    - name: Run tests
-      run: swift test -v
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Test quality-gate scripts
+        run: python3 -m unittest discover -s Scripts/Tests -p 'test_*.py'
+
+      - name: Restore SwiftPM build cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .build/ci
+          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**/*.swift', 'Tests/**/*.swift') }}
+
+      - name: Build release configuration with warnings as errors
+        run: >-
+          swift build
+          --scratch-path .build/ci
+          --configuration release
+          -Xswiftc -warnings-as-errors
+
+      - name: Run complete optimized test suite
+        run: >-
+          swift test
+          --scratch-path .build/ci
+          --configuration release
+          -Xswiftc -warnings-as-errors
+
+      - name: Generate and enforce coverage report
+        env:
+          COVERAGE_REPORT_DIR: ${{ github.workspace }}/coverage-artifacts
+        run: Scripts/coverage.sh
+
+      - name: Publish coverage report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: coverage-report
+          path: coverage-artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
+  sanitizers:
+    name: ${{ matrix.name }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Address Sanitizer
+            sanitizer: address
+            key: asan
+          - name: Undefined Behavior Sanitizer
+            sanitizer: undefined
+            key: ubsan
+          - name: Thread Sanitizer
+            sanitizer: thread
+            key: tsan
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Restore sanitizer build cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .build/sanitizers/${{ matrix.key }}
+          key: sanitizer-${{ matrix.key }}-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**/*.swift', 'Tests/BibTeXKitTests/**/*.swift') }}
+
+      - name: Run behavioral suite with ${{ matrix.name }}
+        run: >-
+          swift test
+          --scratch-path .build/sanitizers/${{ matrix.key }}
+          --sanitize ${{ matrix.sanitizer }}
+          --filter BibTeXKitTests
+          -Xswiftc -warnings-as-errors
+
+  platform-builds:
+    name: Build ${{ matrix.name }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            destination: "generic/platform=macOS"
+            key: macos
+          - name: Mac Catalyst
+            destination: "generic/platform=macOS,variant=Mac Catalyst"
+            key: catalyst
+          - name: iOS
+            destination: "generic/platform=iOS"
+            key: ios
+          - name: tvOS
+            destination: "generic/platform=tvOS"
+            key: tvos
+          - name: watchOS
+            destination: "generic/platform=watchOS"
+            key: watchos
+          - name: visionOS
+            destination: "generic/platform=visionOS"
+            key: visionos
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build for ${{ matrix.name }}
+        env:
+          DESTINATION: ${{ matrix.destination }}
+          DERIVED_DATA: ${{ runner.temp }}/BibTeXKit-${{ matrix.key }}
+        run: |
+          for scheme in BibTeXKit BibTeXKitDynamic; do
+            xcodebuild \
+              -scheme "${scheme}" \
+              -destination "${DESTINATION}" \
+              -derivedDataPath "${DERIVED_DATA}-${scheme}" \
+              CODE_SIGNING_ALLOWED=NO \
+              GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+              SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+              build
+          done

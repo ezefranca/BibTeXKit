@@ -1,0 +1,27 @@
+// swift-tools-version: 6.3
+
+import PackageDescription
+
+// Scripts/build_xcframework.sh copies this manifest and the production source
+// into an isolated archive workspace. The product keeps the framework and
+// importable module name identical: BibTeXKit.
+let package = Package(
+    name: "BibTeXKitXCFrameworkBuild",
+    platforms: [
+        .iOS(.v17),
+        .macOS(.v14),
+        .tvOS(.v17),
+        .watchOS(.v10),
+        .visionOS(.v1)
+    ],
+    products: [
+        .library(
+            name: "BibTeXKit",
+            type: .dynamic,
+            targets: ["BibTeXKit"]
+        )
+    ],
+    targets: [
+        .target(name: "BibTeXKit")
+    ]
+)
