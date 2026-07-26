@@ -1,348 +1,298 @@
-# BibTeXKit Agent Guide
+# BibTeXKit API quick reference
 
-This document provides instructions for AI agents on how to use the BibTeXKit API effectively.
+Use this public reference when writing integrations against the unreleased
+1.1.0 source. The README explains product and integration decisions; this file
+concentrates on API behavior and concise, copyable examples.
 
-## Overview
+## Requirements
 
-BibTeXKit is a Swift framework for parsing, displaying, and manipulating BibTeX bibliographic data. When working with this library, you'll primarily interact with these components:
+| Platform | Minimum version |
+|---|---:|
+| iOS | 17.0 |
+| macOS | 14.0 |
+| Mac Catalyst | 17.0 |
+| tvOS | 17.0 |
+| watchOS | 10.0 |
+| visionOS | 1.0 |
 
-- **BibTeXParser** - Parse BibTeX strings into structured entries
-- **BibTeXEntry** - Work with individual bibliography entries
-- **LaTeXConverter** - Convert between LaTeX and Unicode
-- **BibTeXView** - Display BibTeX with syntax highlighting (SwiftUI)
+BibTeXKit requires Swift 6.3. It is a pure-Swift package with no third-party
+runtime dependency.
 
----
+## Parse BibTeX
 
-## Quick Reference
-
-### Parsing BibTeX
+Parsing untrusted text can fail. Prefer `try`, propagate the typed error when
+the caller can handle it, and avoid force-unwrapping the result.
 
 ```swift
 import BibTeXKit
 
-// Parse a BibTeX string
-let bibtex = """
-@article{einstein1905,
-    author = {Albert Einstein},
-    title = {On the Electrodynamics of Moving Bodies},
-    journal = {Annalen der Physik},
-    year = {1905}
-}
-"""
-
-do {
-    let entries = try BibTeXParser.parse(bibtex)
-    // entries is [BibTeXEntry]
-} catch {
-    // Handle BibTeXParser.Error
+func parseBibliography(_ source: String) throws -> [BibTeXEntry] {
+    try BibTeXParser.parse(source)
 }
 ```
 
-### Parser Options
+The parser accepts entries, comments, preambles, named string constants,
+concatenated values, brace or parenthesis delimiters, LaTeX, and Unicode.
+Comment- or directive-only input returns an empty array by default.
+
+Use options when a boundary requires different behavior:
 
 ```swift
-var options = BibTeXParser.Options()
-options.convertLaTeXToUnicode = true   // Convert \"{u} → ü
-options.normalizeFieldNames = true      // Lowercase field names
-options.stripDelimiters = true          // Remove extra whitespace
-options.preserveRawBibTeX = false       // Keep original string
-
-let entries = try BibTeXParser.parse(bibtex, options: options)
-```
-
-### Accessing Entry Fields
-
-```swift
-let entry = entries.first!
-
-// Type and key
-entry.type          // BibTeXEntryType (e.g., .article, .book)
-entry.citationKey   // String (e.g., "einstein1905")
-
-// Common fields (all return String?)
-entry.author        // "Albert Einstein"
-entry.title         // "On the Electrodynamics..."
-entry.year          // "1905"
-entry.journal       // "Annalen der Physik"
-entry.publisher     // nil if not present
-entry.doi           // nil if not present
-entry.abstract      // nil if not present
-
-// Subscript access (case-insensitive)
-entry["author"]     // Same as entry.author
-entry["TITLE"]      // Case insensitive lookup
-
-// Parsed authors
-entry.authors       // [String] - splits "and"-separated authors
-```
-
-### Entry Types
-
-Available `BibTeXEntryType` cases:
-
-| Standard Types | Additional Types |
-|---------------|------------------|
-| `.article` | `.online` |
-| `.book` | `.software` |
-| `.booklet` | `.dataset` |
-| `.inbook` | `.custom(String)` |
-| `.incollection` | |
-| `.inproceedings` | |
-| `.conference` | |
-| `.manual` | |
-| `.mastersthesis` | |
-| `.phdthesis` | |
-| `.proceedings` | |
-| `.techreport` | |
-| `.unpublished` | |
-| `.misc` | |
-
-### Validation
-
-```swift
-let validation = entry.validate()
-validation.isValid           // Bool
-validation.missingRequired   // [String] - required fields not present
-validation.missingOptional   // [String] - optional fields not present
-```
-
-### Formatting Entries
-
-```swift
-// Format as BibTeX string
-entry.formatted(style: .standard)  // Standard indentation
-entry.formatted(style: .compact)   // Minimal whitespace
-entry.formatted(style: .minimal)   // Single line per field
-entry.formatted(style: .aligned)   // Aligned equals signs
-
-// Generate citations
-entry.citation(style: .apa)        // APA format
-entry.citation(style: .mla)        // MLA format
-entry.citation(style: .chicago)    // Chicago format
-entry.citation(style: .ieee)       // IEEE format
-entry.citation(style: .harvard)    // Harvard format
-```
-
-### Modifying Entries
-
-```swift
-// Create modified copies (entries are immutable)
-let updated = entry
-    .with(field: "note", value: "Important paper")
-    .with(key: "newCitationKey")
-    .with(type: .book)
-    .with(fields: ["abstract": "...", "keywords": "..."])
-```
-
-### LaTeX Conversion
-
-```swift
-// LaTeX to Unicode
-LaTeXConverter.toUnicode("M\\\"uller")     // "Müller"
-LaTeXConverter.toUnicode("Caf\\'e")        // "Café"
-LaTeXConverter.toUnicode("\\alpha")        // "α"
-LaTeXConverter.toUnicode("\\infty")        // "∞"
-
-// Unicode to LaTeX
-LaTeXConverter.toLaTeX("Müller")           // "M\"uller"
-LaTeXConverter.toLaTeX("α")                // "\\alpha"
-```
-
----
-
-## SwiftUI Components
-
-### BibTeXView
-
-Display BibTeX with syntax highlighting:
-
-```swift
-import SwiftUI
 import BibTeXKit
 
-struct ContentView: View {
-    var body: some View {
-        BibTeXView(bibtex: bibtexString)
-            .bibTeXTheme(MonokaiTheme())
-            .lineNumbers(true)
-            .copyButtonHidden(false)
-            .showMetadata(true)
-    }
+func parseWithoutConversion(_ source: String) throws -> [BibTeXEntry] {
+    let options = BibTeXParser.Options(
+        preserveRawBibTeX: true,
+        normalizeFieldNames: true,
+        stripDelimiters: true,
+        convertLaTeXToUnicode: false,
+        requireEntries: true
+    )
+
+    return try BibTeXParser.parse(source, options: options)
 }
 ```
 
-### Available View Modifiers
+`BibTeXParser.Options.strict` selects the configuration above.
+`BibTeXParser.parseOrNil(_:)` is available for intentionally optional parsing,
+but typed errors are preferable when diagnostics matter.
 
-| Modifier | Parameter | Description |
-|----------|-----------|-------------|
-| `.bibTeXTheme(_:)` | `any BibTeXTheme` | Set syntax highlighting theme |
-| `.lineNumbers(_:)` | `Bool` | Show/hide line numbers |
-| `.copyButtonHidden(_:)` | `Bool` | Hide copy button |
-| `.copyButtonPosition(_:)` | `CopyButtonPosition` | Button position |
-| `.copyButtonStyle(_:)` | `CopyButtonStyle` | Button style |
-| `.showMetadata(_:)` | `Bool` | Show entry type badge |
-| `.formattingStyle(_:)` | `FormattingStyle` | BibTeX formatting |
-| `.maxHeight(_:)` | `CGFloat?` | Maximum height |
-| `.minHeight(_:)` | `CGFloat?` | Minimum height |
-| `.cornerRadius(_:)` | `CGFloat` | Corner radius |
-| `.bordered(_:)` | `Bool` | Show border |
-| `.textSelection(_:)` | `Bool` | Enable text selection |
-| `.contentPadding(_:)` | `EdgeInsets` or `CGFloat` | Padding |
-| `.preset(_:)` | `BibTeXViewConfiguration` | Apply preset |
+The parser can throw:
 
-### Built-in Themes
+- `emptyInput`
+- `noEntriesFound`
+- `invalidEntryType(position:)`
+- `missingCitationKey(entryType:position:)`
+- `missingOpeningBrace(position:)`
+- `unmatchedBraces(position:)`
+- `invalidFieldValue(field:position:)`
+- `unexpectedCharacter(character:position:)`
+
+## Read and create entries
 
 ```swift
-DefaultLightTheme()    // Light theme (default)
-DefaultDarkTheme()     // Dark theme
-XcodeLightTheme()      // Xcode light style
-XcodeDarkTheme()       // Xcode dark style
-MonokaiTheme()         // Monokai (dark)
-SolarizedLightTheme()  // Solarized light
-SolarizedDarkTheme()   // Solarized dark
-AdaptiveTheme()        // Adapts to system appearance
-```
+import BibTeXKit
 
-### Configuration Presets
-
-```swift
-BibTeXView(bibtex: bibtex)
-    .preset(.minimal)   // Just content
-    .preset(.compact)   // For tight spaces
-    .preset(.full)      // All features
-    .preset(.mobile)    // Phone optimized
-```
-
----
-
-## Common Tasks
-
-### Task: Parse and extract all authors from a .bib file
-
-```swift
-let entries = try BibTeXParser.parse(bibFileContents)
-let allAuthors = entries.flatMap { $0.authors }
-let uniqueAuthors = Set(allAuthors)
-```
-
-### Task: Find entries by year
-
-```swift
-let entries = try BibTeXParser.parse(bibtex)
-let papers2024 = entries.filter { $0.year == "2024" }
-```
-
-### Task: Generate APA citations for all entries
-
-```swift
-let entries = try BibTeXParser.parse(bibtex)
-let citations = entries.map { $0.citation(style: .apa) }
-```
-
-### Task: Convert LaTeX in a string to readable Unicode
-
-```swift
-let readable = LaTeXConverter.toUnicode(latexString)
-```
-
-### Task: Check if entries have required fields
-
-```swift
-let entries = try BibTeXParser.parse(bibtex)
-for entry in entries {
-    let validation = entry.validate()
-    if !validation.isValid {
-        print("\(entry.citationKey) missing: \(validation.missingRequired)")
+func inspectFirstEntry(in source: String) throws {
+    guard let entry = try BibTeXParser.parse(source).first else {
+        return
     }
+
+    print(entry.type)
+    print(entry.citationKey)
+    print(entry.title as Any)
+    print(entry.year as Any)
+    print(entry["JOURNAL"] as Any)
 }
 ```
 
-### Task: Create a new entry programmatically
+Field lookup is case-insensitive. Frequently used accessors include:
+
+| API | Type |
+|---|---|
+| `title`, `author`, `authorString` | `String?` |
+| `authors` | `[String]` |
+| `year` | `Int?` |
+| `yearString` | `String?` |
+| `journal`, `booktitle`, `publisher` | `String?` |
+| `volume`, `number`, `pages`, `doi` | `String?` |
+| `url`, `doiURL` | `URL?` |
+| `abstract`, `month` | `String?` |
+| `keywords` | `[String]` |
+
+Create an entry directly when the data is already structured:
 
 ```swift
+import BibTeXKit
+
 let entry = BibTeXEntry(
     type: .article,
-    citationKey: "smith2024",
+    citationKey: "smith2026",
     fields: [
-        "author": "John Smith",
-        "title": "My Paper",
-        "journal": "Nature",
-        "year": "2024",
-        "volume": "123",
-        "pages": "1-10"
+        "author": "A. Smith",
+        "title": "A Swift Bibliography",
+        "journal": "Swift Journal",
+        "year": "2026"
     ]
 )
-let bibtexString = entry.formatted(style: .standard)
 ```
 
----
+The initializer accepts an `id` argument. Inject a fixed UUID in deterministic
+tests. Codable payloads use the current 1.1.0 schema and must contain `id`,
+`type`, `citationKey`, and `fields`.
 
-## Error Handling
-
-The parser throws `BibTeXParser.Error`:
+## Validate and update entries
 
 ```swift
-do {
-    let entries = try BibTeXParser.parse(bibtex)
-} catch BibTeXParser.Error.emptyInput {
-    // Input string is empty
-} catch BibTeXParser.Error.noEntriesFound {
-    // No valid entries found
-} catch BibTeXParser.Error.invalidEntryType(let position) {
-    // Invalid @type at position
-} catch BibTeXParser.Error.missingCitationKey(let type, let position) {
-    // Missing key for @type
-} catch BibTeXParser.Error.unmatchedBraces(let position) {
-    // Brace mismatch at position
-} catch {
-    // Other error
+import BibTeXKit
+
+func revisedEntry(_ entry: BibTeXEntry) -> BibTeXEntry? {
+    guard entry.validate().isValid else {
+        return nil
+    }
+
+    return entry
+        .with(field: "doi", value: "10.1000/example")
+        .with(key: "smith2026-revised")
 }
 ```
 
----
+Entries use value semantics. `with(...)`, `settingField(_:to:)`, and
+`settingFields(_:)` return new values and preserve the original. Field
+canonicalization, equality, hashing, ordering, and formatting are
+case-insensitive and deterministic.
 
-## Token Types (for syntax highlighting)
+Validation exposes `missingRequired` and `missingOptional`. Some entry types
+accept alternative required groups, such as `author` or `editor`.
 
-When implementing custom themes, these are the `BibTeXToken` cases:
+## Format and summarize
 
-| Token | Description | Example |
-|-------|-------------|---------|
-| `.entryType` | Entry declaration | `@article` |
-| `.citationKey` | Citation key | `einstein1905` |
-| `.fieldName` | Field name | `author`, `title` |
-| `.string` | Quoted string value | `"value"` |
-| `.number` | Numeric value | `2024` |
-| `.operator` | Operators | `=`, `#` |
-| `.punctuation` | Braces, commas | `{`, `}`, `,` |
-| `.comment` | Comments | `% comment` |
-| `.special` | Directives | `@preamble`, `@string` |
-| `.constant` | String constants | `jan`, `feb` |
-| `.command` | LaTeX commands | `\textbf` |
-| `.math` | Math mode | `$E=mc^2$` |
-| `.environment` | Environments | `\begin{equation}` |
-| `.text` | Plain text | content |
-| `.whitespace` | Whitespace | spaces, newlines |
+```swift
+import BibTeXKit
 
----
+func renderings(for entry: BibTeXEntry) -> [String] {
+    [
+        entry.formatted(style: .standard),
+        entry.formatted(style: .compact),
+        entry.formatted(style: .minimal),
+        entry.formatted(style: .aligned),
+        entry.citation(style: .apa),
+        entry.citation(style: .ieee),
+    ]
+}
+```
 
-## Platform Requirements
+Citation summaries also support `.mla`, `.chicago`, and `.harvard`. They are
+compact Markdown-flavored summaries, not a complete CSL implementation.
 
-| Platform | Minimum Version |
-|----------|-----------------|
-| iOS | 17.0+ |
-| macOS | 14.0+ |
-| tvOS | 17.0+ |
-| watchOS | 9.0+ |
-| visionOS | 1.0+ |
+## Entry types
 
----
+Standard and extended cases are:
 
-## Tips for Agents
+```text
+article, book, booklet, inbook, incollection, inproceedings,
+conference, manual, mastersthesis, phdthesis, proceedings,
+techreport, unpublished, misc, online, software, dataset
+```
 
-1. **Always use try/catch** when parsing - BibTeX input may be malformed
-2. **Entries are immutable** - use `.with()` methods to create modified copies
-3. **Field access is case-insensitive** - `entry["Author"]` equals `entry["author"]`
-4. **Authors are separated by "and"** - use `entry.authors` to get the array
-5. **LaTeX conversion is automatic** by default in parser options
-6. **Themes are Sendable** - safe to use across concurrency boundaries
-7. **Check validation** before relying on fields for citations
+Use `.custom("patent")` for another type. Custom type identity is
+case-insensitive, while a custom spelling that matches a standard name remains
+distinct from the corresponding standard enum case.
+
+## Convert LaTeX and inspect DOIs
+
+```swift
+import BibTeXKit
+
+let readable = LaTeXConverter.toUnicode(#"M\"uller and \alpha"#)
+let latex = LaTeXConverter.toLaTeX("Müller and α")
+
+let doi = DOIDetector.extractDOI(
+    from: "Available at https://doi.org/10.1000/example."
+)
+let url = doi.flatMap { DOIDetector.doiURL(for: $0) }
+```
+
+Available DOI operations are `containsDOI(_:)`, `extractDOI(from:)`,
+`extractAllDOIs(from:)`, `isValidDOI(_:)`, `normalize(_:)`, and
+`doiURL(for:)`. Entry conveniences are `doiURL`, `hasValidDOI`, and
+`normalizedDOI`. These APIs do not perform network requests.
+
+Conversion preserves unknown or malformed LaTeX when a lossless conversion
+cannot be established.
+
+## Tokenize and highlight
+
+```swift
+import BibTeXKit
+import Foundation
+
+func highlightedBibliography(
+    _ source: String
+) -> AttributedString {
+    let tokenizer = BibTeXTokenizer()
+    let positionedTokens = tokenizer.tokenize(source)
+    let pairs = tokenizer.tokenizePairs(source)
+    print(positionedTokens.count, pairs.count)
+
+    let highlighter = BibTeXHighlighter(theme: MonokaiTheme())
+    return highlighter.highlight(source)
+}
+```
+
+`tokenize(_:)` returns `BibTeXTokenInfo` values with exact source ranges.
+`tokenizePairs(_:)` omits ranges. Token cases cover entry types, citation keys,
+field names, strings, numbers, operators, punctuation, comments, directives,
+constants, LaTeX commands, accents, escaped special characters, math,
+environments, text, and whitespace.
+
+Built-in themes are `DefaultLightTheme`, `DefaultDarkTheme`,
+`XcodeLightTheme`, `XcodeDarkTheme`, `MonokaiTheme`,
+`SolarizedLightTheme`, `SolarizedDarkTheme`, and `AdaptiveTheme`. Custom
+themes conform to `BibTeXTheme`.
+
+## Present content in SwiftUI
+
+```swift
+import BibTeXKit
+import SwiftUI
+
+struct EntryView: View {
+    let entry: BibTeXEntry
+
+    var body: some View {
+        BibTeXView(entry: entry)
+            .preset(.full)
+            .bibTeXTheme(AdaptiveTheme())
+            .formattingStyle(.aligned)
+    }
+}
+```
+
+Raw `BibTeXView(bibtex:)` input is highlighted exactly as supplied. A parsed
+entry is formatted with the configured style. `BibTeXText` provides highlighted
+text without metadata, borders, line numbers, or copy controls.
+
+Common view modifiers are:
+
+| Modifier | Purpose |
+|---|---|
+| `.bibTeXTheme(_:)` | Select a theme |
+| `.lineNumbers(_:)` | Show line numbers |
+| `.copyButtonHidden(_:)` | Hide the copy action |
+| `.copyButtonPosition(_:)` | Position the copy action |
+| `.copyButtonStyle(_:)` | Select icon, label, or compact presentation |
+| `.showMetadata(_:)` | Show entry metadata |
+| `.formattingStyle(_:)` | Format parsed entries |
+| `.maxHeight(_:)`, `.minHeight(_:)` | Constrain layout |
+| `.cornerRadius(_:)`, `.bordered(_:)` | Configure the container |
+| `.textSelection(_:)` | Configure selection where supported |
+| `.contentPadding(_:)` | Set content insets |
+| `.preset(_:)` | Replace the complete configuration |
+
+Apply a preset before focused modifiers because `.preset(_:)` replaces the
+whole configuration. Available presets are `.minimal`, `.compact`, `.full`,
+and `.mobile`.
+
+The copy control is available on iOS, macOS, Mac Catalyst, and visionOS. It is
+omitted on watchOS and tvOS. Text selection is also ignored on watchOS and
+tvOS.
+
+## Concurrency and safety
+
+Parsers, entries, tokens, themes, highlighters, and configurations are
+`Sendable`. They keep no mutable shared parser state and can cross task
+boundaries. Continue to apply application-specific input-size limits when
+processing remote files; no finite library can guarantee operation after
+process-wide memory exhaustion or operating-system termination.
+
+## Integration rules
+
+1. Treat parsing failure as normal input handling.
+2. Avoid force unwraps and `try!` in generated integration code.
+3. Use value-style entry updates.
+4. Use `entry.authors` instead of manually splitting `author`.
+5. Use typed accessors where they preserve the intended value type.
+6. Do not describe citation summaries as publisher-conformant CSL output.
+7. Do not claim DOI helpers perform resolution or validation over the network.
+8. Keep platform availability consistent with `Package.swift`.

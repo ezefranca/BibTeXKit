@@ -22,25 +22,19 @@ import SwiftUI
 /// - ``MonokaiTheme``: Popular dark theme
 /// - ``SolarizedLightTheme``: Solarized light
 /// - ``SolarizedDarkTheme``: Solarized dark
+/// - ``AdaptiveTheme``: Selects a light or dark theme for the current appearance
 ///
 /// ## Custom Themes
 ///
-/// Create a custom theme by conforming to `BibTeXTheme`:
-///
-/// ```swift
-/// struct MyTheme: BibTeXTheme {
-///     var backgroundColor: Color { .black }
-///     var textColor: Color { .white }
-///     var entryTypeColor: Color { .red }
-///     // ... implement all required colors
-/// }
-/// ```
+/// A custom theme supplies a name, every required syntax and interface color,
+/// and a font. Environment and escaped-special-character colors have default
+/// implementations.
 ///
 /// Then use it with `BibTeXView`:
 ///
 /// ```swift
-/// BibTeXView(entry)
-///     .theme(MyTheme())
+/// BibTeXView(entry: entry)
+///     .bibTeXTheme(MyTheme())
 /// ```
 public protocol BibTeXTheme: Sendable {
     
@@ -94,6 +88,16 @@ public protocol BibTeXTheme: Sendable {
     
     /// Color for LaTeX accents.
     var accentColor: Color { get }
+
+    /// Color for LaTeX environment commands.
+    ///
+    /// The default is ``commandColor``.
+    var environmentColor: Color { get }
+
+    /// Color for escaped LaTeX special characters.
+    ///
+    /// The default is ``accentColor``.
+    var specialCharColor: Color { get }
     
     // MARK: - Text
     
@@ -105,7 +109,9 @@ public protocol BibTeXTheme: Sendable {
     /// Color for line numbers (if shown).
     var lineNumberColor: Color { get }
     
-    /// Color for selection highlight.
+    /// Tint supplied to selectable text.
+    ///
+    /// The platform controls the final appearance of text selection.
     var selectionColor: Color { get }
     
     /// Color for border
@@ -115,14 +121,27 @@ public protocol BibTeXTheme: Sendable {
     
     /// The font to use for code display.
     var font: Font { get }
-    
-    /// The font size.
-    var fontSize: CGFloat { get }
 }
 
 // MARK: - Default Implementations
 
 extension BibTeXTheme {
+    /// Resolves the theme for a color scheme.
+    ///
+    /// Concrete themes return themselves. ``AdaptiveTheme`` selects its
+    /// configured light or dark theme before highlighting begins.
+    public func resolved(for colorScheme: ColorScheme) -> any BibTeXTheme {
+        var theme: any BibTeXTheme = self
+
+        // Adaptive themes are value types, so their nesting is finite. Resolve
+        // that nesting iteratively to keep user-supplied theme composition off
+        // the call stack.
+        while let adaptiveTheme = theme as? AdaptiveTheme {
+            theme = adaptiveTheme.selectedTheme(for: colorScheme)
+        }
+
+        return theme
+    }
     
     /// Default environment color (same as command color).
     public var environmentColor: Color { commandColor }
@@ -145,9 +164,9 @@ extension BibTeXTheme {
         case .constant: return constantColor
         case .command: return commandColor
         case .math: return mathColor
-        case .environment: return commandColor
+        case .environment: return environmentColor
         case .accent: return accentColor
-        case .specialChar: return accentColor
+        case .specialChar: return specialCharColor
         case .whitespace, .text: return textColor
         }
     }
@@ -162,25 +181,24 @@ public struct DefaultLightTheme: BibTeXTheme {
     public init() {}
     
     public var backgroundColor: Color { Color(white: 0.98) }
-    public var textColor: Color { Color.primary }
+    public var textColor: Color { Color.black }
     public var entryTypeColor: Color { Color.blue }
     public var citationKeyColor: Color { Color.orange }
     public var fieldNameColor: Color { Color.green }
     public var stringColor: Color { Color.red }
     public var numberColor: Color { Color.purple }
-    public var punctuationColor: Color { Color.secondary }
-    public var operatorColor: Color { Color.primary }
+    public var punctuationColor: Color { Color(white: 0.4) }
+    public var operatorColor: Color { Color.black }
     public var commentColor: Color { Color.gray }
     public var specialColor: Color { Color.pink }
     public var constantColor: Color { Color.teal }
     public var commandColor: Color { Color.indigo }
     public var mathColor: Color { Color.purple }
     public var accentColor: Color { Color.brown }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(white: 0.8) }
     public var lineNumberColor: Color { Color.gray }
     public var selectionColor: Color { Color.blue.opacity(0.2) }
     public var font: Font { .system(.body, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
 }
 
 // MARK: - Default Dark Theme
@@ -206,11 +224,10 @@ public struct DefaultDarkTheme: BibTeXTheme {
     public var commandColor: Color { Color(red: 0.73, green: 0.58, blue: 0.98) }
     public var mathColor: Color { Color(red: 0.83, green: 0.68, blue: 0.98) }
     public var accentColor: Color { Color(red: 0.85, green: 0.65, blue: 0.45) }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(white: 0.3) }
     public var lineNumberColor: Color { Color(white: 0.4) }
-    public var selectionColor: Color { Color(.systemBlue).opacity(0.3) }
+    public var selectionColor: Color { Color.blue.opacity(0.3) }
     public var font: Font { .system(.body, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
 }
 
 // MARK: - Xcode Light Theme
@@ -236,11 +253,10 @@ public struct XcodeLightTheme: BibTeXTheme {
     public var commandColor: Color { Color(red: 0.61, green: 0.14, blue: 0.58) }
     public var mathColor: Color { Color(red: 0.11, green: 0.00, blue: 0.81) }
     public var accentColor: Color { Color(red: 0.61, green: 0.14, blue: 0.58) }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(white: 0.8) }
     public var lineNumberColor: Color { Color(red: 0.67, green: 0.70, blue: 0.69) }
     public var selectionColor: Color { Color(red: 0.70, green: 0.84, blue: 1.0) }
-    public var font: Font { .system(size: 13, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
+    public var font: Font { .system(.body, design: .monospaced) }
 }
 
 // MARK: - Xcode Dark Theme
@@ -266,11 +282,10 @@ public struct XcodeDarkTheme: BibTeXTheme {
     public var commandColor: Color { Color(red: 0.99, green: 0.42, blue: 0.62) }
     public var mathColor: Color { Color(red: 0.82, green: 0.79, blue: 0.54) }
     public var accentColor: Color { Color(red: 0.99, green: 0.42, blue: 0.62) }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(white: 0.35) }
     public var lineNumberColor: Color { Color(red: 0.45, green: 0.50, blue: 0.54) }
     public var selectionColor: Color { Color(red: 0.24, green: 0.34, blue: 0.49) }
-    public var font: Font { .system(size: 13, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
+    public var font: Font { .system(.body, design: .monospaced) }
 }
 
 // MARK: - Monokai Theme
@@ -296,11 +311,10 @@ public struct MonokaiTheme: BibTeXTheme {
     public var commandColor: Color { Color(red: 0.65, green: 0.89, blue: 0.18) } // Green
     public var mathColor: Color { Color(red: 0.68, green: 0.51, blue: 1.00) }
     public var accentColor: Color { Color(red: 0.98, green: 0.15, blue: 0.45) }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(red: 0.46, green: 0.44, blue: 0.37) }
     public var lineNumberColor: Color { Color(red: 0.46, green: 0.44, blue: 0.37) }
     public var selectionColor: Color { Color(red: 0.28, green: 0.29, blue: 0.24) }
-    public var font: Font { .system(size: 13, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
+    public var font: Font { .system(.body, design: .monospaced) }
 }
 
 // MARK: - Solarized Light Theme
@@ -326,11 +340,10 @@ public struct SolarizedLightTheme: BibTeXTheme {
     public var commandColor: Color { Color(red: 0.42, green: 0.44, blue: 0.77) } // Violet
     public var mathColor: Color { Color(red: 0.71, green: 0.54, blue: 0.00) }
     public var accentColor: Color { Color(red: 0.83, green: 0.21, blue: 0.51) }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(red: 0.58, green: 0.63, blue: 0.63) }
     public var lineNumberColor: Color { Color(red: 0.58, green: 0.63, blue: 0.63) }
     public var selectionColor: Color { Color(red: 0.93, green: 0.91, blue: 0.84) }
-    public var font: Font { .system(size: 13, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
+    public var font: Font { .system(.body, design: .monospaced) }
 }
 
 // MARK: - Solarized Dark Theme
@@ -357,23 +370,24 @@ public struct SolarizedDarkTheme: BibTeXTheme {
     public var commandColor: Color { Color(red: 0.42, green: 0.44, blue: 0.77) }
     public var mathColor: Color { Color(red: 0.71, green: 0.54, blue: 0.00) }
     public var accentColor: Color { Color(red: 0.83, green: 0.21, blue: 0.51) }
-    public var borderColor: Color { Color.primary }
+    public var borderColor: Color { Color(red: 0.40, green: 0.48, blue: 0.51) }
     public var lineNumberColor: Color { Color(red: 0.40, green: 0.48, blue: 0.51) }
     public var selectionColor: Color { Color(red: 0.03, green: 0.21, blue: 0.26) }
-    public var font: Font { .system(size: 13, design: .monospaced) }
-    public var fontSize: CGFloat { 13 }
+    public var font: Font { .system(.body, design: .monospaced) }
 }
 
 // MARK: - Adaptive Theme
 
-/// A theme that automatically adapts to light/dark mode.
+/// A theme that selects between light and dark themes.
+///
+/// `BibTeXView` and `BibTeXText` resolve this theme with their current
+/// environment color scheme. When its properties are accessed directly,
+/// `AdaptiveTheme` deterministically uses its light theme.
 public struct AdaptiveTheme: BibTeXTheme {
     public var name: String { current.name }
     
     private let lightTheme: any BibTeXTheme
     private let darkTheme: any BibTeXTheme
-    
-    @Environment(\.colorScheme) private var colorScheme
     
     /// Creates an adaptive theme.
     ///
@@ -384,11 +398,18 @@ public struct AdaptiveTheme: BibTeXTheme {
         light: any BibTeXTheme = DefaultLightTheme(),
         dark: any BibTeXTheme = DefaultDarkTheme()
     ) {
-        self.lightTheme = light
-        self.darkTheme = dark
+        // Store concrete leaves. Besides making property access constant-time,
+        // normalization prevents a deeply composed value from building an ARC
+        // destruction chain that can exhaust the stack when released.
+        self.lightTheme = light.resolved(for: .light)
+        self.darkTheme = dark.resolved(for: .dark)
     }
     
     private var current: any BibTeXTheme {
+        lightTheme
+    }
+
+    fileprivate func selectedTheme(for colorScheme: ColorScheme) -> any BibTeXTheme {
         colorScheme == .dark ? darkTheme : lightTheme
     }
     
@@ -407,9 +428,10 @@ public struct AdaptiveTheme: BibTeXTheme {
     public var commandColor: Color { current.commandColor }
     public var mathColor: Color { current.mathColor }
     public var accentColor: Color { current.accentColor }
+    public var environmentColor: Color { current.environmentColor }
+    public var specialCharColor: Color { current.specialCharColor }
     public var borderColor: Color { current.borderColor }
     public var lineNumberColor: Color { current.lineNumberColor }
     public var selectionColor: Color { current.selectionColor }
     public var font: Font { current.font }
-    public var fontSize: CGFloat { current.fontSize }
 }

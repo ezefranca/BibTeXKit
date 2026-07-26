@@ -5,217 +5,134 @@
 //  Copyright © 2025. MIT License.
 //
 
-import XCTest
 import SwiftUI
+import Testing
 @testable import BibTeXKit
 
-final class BibTeXThemeTests: XCTestCase {
-    
-    // MARK: - Default Light Theme Tests
-    
-    func testDefaultLightTheme() {
-        let theme = DefaultLightTheme()
-        
-        XCTAssertNotNil(theme.font)
-        XCTAssertNotNil(theme.backgroundColor)
+@Suite("Given a BibTeX syntax theme")
+struct BibTeXThemeTests {
+    @Test("Given the built-in themes, when metadata is inspected, then names are stable and unique")
+    func builtInThemeMetadataIsStableAndUnique() {
+        let themes: [any BibTeXTheme] = [
+            DefaultLightTheme(),
+            DefaultDarkTheme(),
+            XcodeLightTheme(),
+            XcodeDarkTheme(),
+            MonokaiTheme(),
+            SolarizedLightTheme(),
+            SolarizedDarkTheme()
+        ]
+
+        #expect(
+            themes.map(\.name) == [
+                "Default Light",
+                "Default Dark",
+                "Xcode Light",
+                "Xcode Dark",
+                "Monokai",
+                "Solarized Light",
+                "Solarized Dark"
+            ]
+        )
+        #expect(Set(themes.map(\.name)).count == themes.count)
     }
-    
-    // MARK: - Default Dark Theme Tests
-    
-    func testDefaultDarkTheme() {
-        let theme = DefaultDarkTheme()
-        
-        XCTAssertNotNil(theme.font)
+
+    @Test("Given every token kind, when its color is requested, then it maps to the documented theme property")
+    func everyTokenMapsToItsDocumentedColor() {
+        let theme = MappingTheme()
+        let expectedColors: [BibTeXToken: Color] = [
+            .entryType: theme.entryTypeColor,
+            .citationKey: theme.citationKeyColor,
+            .fieldName: theme.fieldNameColor,
+            .string: theme.stringColor,
+            .number: theme.numberColor,
+            .operator: theme.operatorColor,
+            .punctuation: theme.punctuationColor,
+            .comment: theme.commentColor,
+            .special: theme.specialColor,
+            .constant: theme.constantColor,
+            .command: theme.commandColor,
+            .math: theme.mathColor,
+            .environment: theme.environmentColor,
+            .accent: theme.accentColor,
+            .specialChar: theme.specialCharColor,
+            .whitespace: theme.textColor,
+            .text: theme.textColor
+        ]
+
+        #expect(expectedColors.count == BibTeXToken.allCases.count)
+        for token in BibTeXToken.allCases {
+            #expect(theme.color(for: token) == expectedColors[token])
+        }
     }
-    
-    // MARK: - Xcode Light Theme Tests
-    
-    func testXcodeLightTheme() {
-        let theme = XcodeLightTheme()
-        
-        XCTAssertNotNil(theme.backgroundColor)
-    }
-    
-    func testXcodeLightThemeEntryType() {
-        let theme = XcodeLightTheme()
-        let color = theme.color(for: .entryType)
-        
-        XCTAssertNotNil(color)
-    }
-    
-    // MARK: - Xcode Dark Theme Tests
-    
-    func testXcodeDarkTheme() {
-        let theme = XcodeDarkTheme()
-        
-        XCTAssertNotNil(theme.backgroundColor)
-    }
-    
-    // MARK: - Monokai Theme Tests
-    
-    func testMonokaiTheme() {
+
+    @Test("Given a concrete theme, when either color scheme resolves, then the same theme remains active")
+    func concreteThemeResolutionIsStable() {
         let theme = MonokaiTheme()
-        
-        XCTAssertNotNil(theme.font)
+
+        #expect(theme.resolved(for: .light).name == "Monokai")
+        #expect(theme.resolved(for: .dark).name == "Monokai")
     }
-    
-    func testMonokaiThemeColors() {
-        let theme = MonokaiTheme()
-        
-        // Monokai should have distinct colors for syntax elements
-        let entryTypeColor = theme.color(for: .entryType)
-        let stringColor = theme.color(for: .string)
-        let commentColor = theme.color(for: .comment)
-        
-        XCTAssertNotNil(entryTypeColor)
-        XCTAssertNotNil(stringColor)
-        XCTAssertNotNil(commentColor)
+
+    @Test("Given an adaptive theme, when explicit appearances resolve, then the matching child theme is selected")
+    func adaptiveThemeSelectsMatchingChild() {
+        let theme = AdaptiveTheme(
+            light: XcodeLightTheme(),
+            dark: XcodeDarkTheme()
+        )
+
+        #expect(theme.name == "Xcode Light")
+        #expect(theme.resolved(for: .light).name == "Xcode Light")
+        #expect(theme.resolved(for: .dark).name == "Xcode Dark")
     }
-    
-    // MARK: - Solarized Light Theme Tests
-    
-    func testSolarizedLightTheme() {
-        let theme = SolarizedLightTheme()
-        
-        XCTAssertEqual(theme.name, "Solarized Light")
-        XCTAssertNotNil(theme.backgroundColor)
+
+    @Test("Given nested adaptive themes, when dark appearance resolves, then resolution continues to a concrete theme")
+    func nestedAdaptiveThemesResolveRecursively() {
+        let nestedDark = AdaptiveTheme(
+            light: SolarizedLightTheme(),
+            dark: MonokaiTheme()
+        )
+        let theme = AdaptiveTheme(
+            light: DefaultLightTheme(),
+            dark: nestedDark
+        )
+
+        #expect(theme.resolved(for: .dark).name == "Monokai")
     }
-    
-    func testSolarizedLightThemeColors() {
-        let theme = SolarizedLightTheme()
-        
-        let tokenTypes: [BibTeXToken] = [.entryType, .citationKey, .string, .comment]
-        
-        for token in tokenTypes {
-            XCTAssertNotNil(theme.color(for: token))
-        }
-    }
-    
-    // MARK: - Solarized Dark Theme Tests
-    
-    func testSolarizedDarkTheme() {
-        let theme = SolarizedDarkTheme()
-        
-        XCTAssertEqual(theme.name, "Solarized Dark")
-        XCTAssertNotNil(theme.backgroundColor)
-    }
-    
-    // MARK: - Adaptive Theme Tests
-    
-    func testAdaptiveThemeLight() {
-        let theme = AdaptiveTheme()
-        
-        // Should return light theme properties
-        XCTAssertNotNil(theme.backgroundColor)
-        XCTAssertNotNil(theme.color(for: .entryType))
-    }
-    
-    func testAdaptiveThemeDark() {
-        let theme = AdaptiveTheme()
-        
-        // Should return dark theme properties
-        XCTAssertNotNil(theme.backgroundColor)
-        XCTAssertNotNil(theme.color(for: .entryType))
-    }
-    
-    func testAdaptiveThemeWithCustomThemes() {
-        let light = MonokaiTheme() // Use as light for testing
-        let dark = SolarizedDarkTheme()
-        
-        let theme = AdaptiveTheme(light: light, dark: dark)
-        
-        // AdaptiveTheme should have valid properties regardless of colorScheme
-        // The theme name will depend on the current colorScheme in the environment
-        XCTAssertFalse(theme.name.isEmpty)
-        XCTAssertNotNil(theme.backgroundColor)
-        XCTAssertNotNil(theme.color(for: .entryType))
-        
-        // The name should be one of the underlying theme names
-        let validNames = [light.name, dark.name]
-        XCTAssertTrue(validNames.contains(theme.name))
-    }
-    
-    // MARK: - Theme Protocol Tests
-    
-    func testThemeProtocolConformance() {
-        let themes: [any BibTeXTheme] = [
-            DefaultLightTheme(),
-            DefaultDarkTheme(),
-            XcodeLightTheme(),
-            XcodeDarkTheme(),
-            MonokaiTheme(),
-            SolarizedLightTheme(),
-            SolarizedDarkTheme()
-        ]
-        
-        for theme in themes {
-            // All required properties should be accessible
-            XCTAssertFalse(theme.name.isEmpty, "\(type(of: theme)) should have a name")
-            XCTAssertNotNil(theme.font, "\(type(of: theme)) should have a font")
-            XCTAssertNotNil(theme.backgroundColor, "\(type(of: theme)) should have a background color")
-            XCTAssertNotNil(theme.borderColor, "\(type(of: theme)) should have a border color")
-        }
-    }
-    
-    // MARK: - Font Tests
-    
-    func testFontIsMonospaced() {
-        let themes: [any BibTeXTheme] = [
-            DefaultLightTheme(),
-            MonokaiTheme(),
-            XcodeLightTheme()
-        ]
-        
-        for theme in themes {
-            let font = theme.font
-            XCTAssertNotNil(font, "\(theme.name) should have a font")
-        }
-    }
-    
-    // MARK: - Built-in Themes List Tests
-    
-    func testBuiltInThemesCount() {
-        // We have 7 built-in themes
-        let themes: [any BibTeXTheme] = [
-            DefaultLightTheme(),
-            DefaultDarkTheme(),
-            XcodeLightTheme(),
-            XcodeDarkTheme(),
-            MonokaiTheme(),
-            SolarizedLightTheme(),
-            SolarizedDarkTheme()
-        ]
-        
-        XCTAssertEqual(themes.count, 7)
-    }
-    
-    func testThemeNamesUnique() {
-        let themes: [any BibTeXTheme] = [
-            DefaultLightTheme(),
-            DefaultDarkTheme(),
-            XcodeLightTheme(),
-            XcodeDarkTheme(),
-            MonokaiTheme(),
-            SolarizedLightTheme(),
-            SolarizedDarkTheme()
-        ]
-        
-        let names = themes.map { $0.name }
-        let uniqueNames = Set(names)
-        
-        XCTAssertEqual(names.count, uniqueNames.count, "All theme names should be unique")
-    }
-    
-    // MARK: - Theme Sendable Tests
-    
-    func testThemesAreSendable() {
+
+    @Test("Given a theme value, when sent to a detached task, then its immutable metadata remains readable")
+    func themeCrossesTaskBoundary() async {
         let theme: any BibTeXTheme & Sendable = DefaultLightTheme()
-        
-        // If this compiles, the theme is Sendable
-        Task {
-            let _ = theme.font
-        }
-        
-        XCTAssertNotNil(theme)
+
+        let name = await Task.detached {
+            theme.name
+        }.value
+
+        #expect(name == "Default Light")
     }
+}
+
+private struct MappingTheme: BibTeXTheme {
+    let name = "Mapping"
+    let backgroundColor = Color(red: 0.01, green: 0.01, blue: 0.01)
+    let entryTypeColor = Color(red: 0.02, green: 0.02, blue: 0.02)
+    let citationKeyColor = Color(red: 0.03, green: 0.03, blue: 0.03)
+    let fieldNameColor = Color(red: 0.04, green: 0.04, blue: 0.04)
+    let stringColor = Color(red: 0.05, green: 0.05, blue: 0.05)
+    let numberColor = Color(red: 0.06, green: 0.06, blue: 0.06)
+    let punctuationColor = Color(red: 0.07, green: 0.07, blue: 0.07)
+    let operatorColor = Color(red: 0.08, green: 0.08, blue: 0.08)
+    let commentColor = Color(red: 0.09, green: 0.09, blue: 0.09)
+    let specialColor = Color(red: 0.10, green: 0.10, blue: 0.10)
+    let constantColor = Color(red: 0.11, green: 0.11, blue: 0.11)
+    let commandColor = Color(red: 0.12, green: 0.12, blue: 0.12)
+    let mathColor = Color(red: 0.13, green: 0.13, blue: 0.13)
+    let accentColor = Color(red: 0.14, green: 0.14, blue: 0.14)
+    let environmentColor = Color(red: 0.19, green: 0.19, blue: 0.19)
+    let specialCharColor = Color(red: 0.20, green: 0.20, blue: 0.20)
+    let textColor = Color(red: 0.15, green: 0.15, blue: 0.15)
+    let lineNumberColor = Color(red: 0.16, green: 0.16, blue: 0.16)
+    let selectionColor = Color(red: 0.17, green: 0.17, blue: 0.17)
+    let borderColor = Color(red: 0.18, green: 0.18, blue: 0.18)
+    let font = Font.system(.body, design: .monospaced)
 }

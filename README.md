@@ -1,355 +1,362 @@
 # BibTeXKit
 
-<p align="center">
-  <img src="https://github.com/ezefranca/BibTeXKit/actions/workflows/build.yml/badge.svg" alt="Build Status" />
-  <img src="https://img.shields.io/badge/platforms-iOS%2015%2B%20%7C%20macOS%2012%2B%20%7C%20tvOS%2015%2B%20%7C%20watchOS%208%2B%20%7C%20visionOS%201%2B-blue.svg" alt="Platforms" />
-  <img src="https://img.shields.io/badge/Swift-6.1%2B-orange.svg" alt="Swift 6.1+" />
-  <img src="https://img.shields.io/badge/SPM-compatible-brightgreen.svg" alt="Swift Package Manager" />
-  <img src="https://img.shields.io/badge/License-MIT-lightgrey.svg" alt="MIT License" />
-</p>
+[![Build and test](https://github.com/ezefranca/BibTeXKit/actions/workflows/build.yml/badge.svg)](https://github.com/ezefranca/BibTeXKit/actions/workflows/build.yml)
+[![Swift 6.3](https://img.shields.io/badge/Swift-6.3-F05138?logo=swift&logoColor=white)](Package.swift)
+[![Apple platforms](https://img.shields.io/badge/Platforms-Apple-007AFF)](#requirements)
+[![Swift Package Manager](https://img.shields.io/badge/SwiftPM-compatible-4BC51D?logo=swift&logoColor=white)](#installation)
+[![MIT License](https://img.shields.io/badge/License-MIT-6E7781)](LICENSE)
 
-![logo](https://github.com/ezefranca/BibTeXKit/blob/main/.github/images/example1.png?raw=true)
+Parse, transform, and present BibTeX with native Swift.
 
-**BibTeXKit** is a modern, Swift-native framework for parsing, displaying, and manipulating BibTeX bibliographic data. Built with SwiftUI, it provides beautiful syntax highlighting and a highly customizable viewing experience across all Apple platforms.
+BibTeXKit gives Apple-platform applications a pure-Swift bibliography core
+with explicit parsing rules, deterministic formatting, and a SwiftUI
+presentation layer. It handles real-world BibTeX without networking,
+third-party runtime dependencies, or a C compatibility layer.
 
-## ✨ Features
+![A BibTeX article rendered by BibTeXKit in light and dark SwiftUI themes](.github/images/bibtexkit-overview.png)
 
--  **Beautiful Syntax Highlighting** — 7 built-in themes including Monokai, Solarized, and Xcode styles
--  **Responsive Design** — Adapts perfectly from Apple Watch to Mac
--  **Highly Customizable** — Toggle copy buttons, line numbers, metadata, and more
--  **Complete BibTeX Support** — All 17 standard entry types plus custom types
--  **LaTeX Conversion** — Automatic LaTeX to Unicode conversion (ü → ü)
--  **Quality API** — SwiftUI view modifiers that feel native
-- **100% Test Coverage** — Comprehensive test suite
-- **Thread Safe** — Full `Sendable` conformance for modern concurrency
+```swift
+import BibTeXKit
 
-## 📦 Installation
+let source = """
+@article{einstein1905,
+    author = {Albert Einstein},
+    title = {On the Electrodynamics of Moving Bodies},
+    journal = {Annalen der Physik},
+    year = {1905}
+}
+"""
 
-### Swift Package Manager
+let entries = try BibTeXParser.parse(source)
+let titles = entries.compactMap(\.title)
+```
 
-Add BibTeXKit to your project via Xcode:
+## Overview
 
-1. File → Add Package Dependencies...
-2. Enter: `https://github.com/ezefranca/BibTeXKit.git`
-3. Select "Up to Next Major Version" with `1.0.1`
+BibTeXKit keeps the full bibliography workflow in one module:
 
-Or add to your `Package.swift`:
+| Capability | What it provides |
+|---|---|
+| Parse | Entries, comments, preambles, named strings, concatenated values, nested delimiters, LaTeX, and Unicode |
+| Model | Typed `Sendable` values, case-insensitive fields, validation, value-style updates, deterministic formatting, and `Codable` |
+| Transform | Iterative LaTeX conversion, DOI extraction and normalization, citation summaries, and syntax tokenization |
+| Present | `AttributedString` highlighting and native SwiftUI views with adaptive themes, line numbers, metadata, selection, and copy |
+| Distribute | Automatic and dynamic SwiftPM products from one target, plus a release XCFramework built from the same module |
+
+BibTeX is small enough to appear simple and irregular enough to fail at the
+edges. Production data combines nested groups, declarations, custom entry
+types, malformed records, and text from many writing systems. BibTeXKit gives
+those cases one explicit, testable boundary.
+
+## Requirements
+
+| Platform | Minimum version |
+|---|---:|
+| iOS | 17.0 |
+| macOS | 14.0 |
+| Mac Catalyst | 17.0 |
+| tvOS | 17.0 |
+| watchOS | 10.0 |
+| visionOS | 1.0 |
+
+BibTeXKit requires Swift 6.3. The package has no third-party runtime
+dependencies.
+
+## Installation
+
+The following dependency declaration targets the forthcoming 1.1.0 release.
+After its tag is published, add
+`https://github.com/ezefranca/BibTeXKit.git` in Xcode, or declare the package
+directly:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ezefranca/BibTeXKit.git", from: "1.0.1")
+    .package(
+        url: "https://github.com/ezefranca/BibTeXKit.git",
+        from: "1.1.0"
+    )
 ]
 ```
 
-## 🚀 Quick Start
+### One package, two linkage choices
 
-### Display BibTeX with Syntax Highlighting
+The root manifest follows a one-target, two-product design. Both products use
+the same repository, version, source, module, and public API.
 
 ```swift
+products: [
+    .library(name: "BibTeXKit", targets: ["BibTeXKit"]),
+    .library(
+        name: "BibTeXKitDynamic",
+        type: .dynamic,
+        targets: ["BibTeXKit"]
+    )
+]
+```
+
+Choose the product in the consuming target:
+
+```swift
+targets: [
+    .target(
+        name: "YourTarget",
+        dependencies: [
+            .product(name: "BibTeXKit", package: "BibTeXKit")
+        ]
+    )
+]
+```
+
+| Product | Linkage | Use it when |
+|---|---|---|
+| `BibTeXKit` | Automatic | SwiftPM should choose the appropriate linkage. This is the default. |
+| `BibTeXKitDynamic` | Dynamic | The application or framework graph requires a dynamically linked framework. |
+
+Select `BibTeXKitDynamic` in the target dependency to force dynamic linkage.
+The imported module remains `BibTeXKit`.
+
+Tagged releases also publish `BibTeXKit.xcframework.zip` for projects that
+embed a precompiled framework directly in Xcode. It comes from this repository
+and does not require a second package definition. See
+[XCFramework distribution](DISTRIBUTION.md) for exact generation, validation,
+and integration steps.
+
+## Use BibTeXKit
+
+### Parse untrusted input
+
+Parsing reports malformed structures through `BibTeXParser.Error`. Empty input
+throws. A document containing only comments or declarations returns no entries
+unless the caller requires at least one.
+
+```swift
+import BibTeXKit
+
+func articleTitles(in source: String) throws -> [String] {
+    let options = BibTeXParser.Options(
+        preserveRawBibTeX: false,
+        normalizeFieldNames: true,
+        stripDelimiters: true,
+        convertLaTeXToUnicode: true,
+        requireEntries: true
+    )
+
+    return try BibTeXParser.parse(source, options: options)
+        .filter { $0.type == .article }
+        .compactMap(\.title)
+}
+```
+
+Use `BibTeXParser.Options.strict` to preserve each entry's raw BibTeX, retain
+LaTeX spelling, and require at least one entry.
+
+### Inspect, validate, and update
+
+Common fields have typed accessors. Subscript lookup is case-insensitive.
+Entries use value semantics: an update returns a new value and leaves the
+original unchanged.
+
+```swift
+import BibTeXKit
+
+func addingDOI(
+    _ doi: String,
+    to entry: BibTeXEntry
+) -> BibTeXEntry? {
+    guard entry.validate().isValid else {
+        return nil
+    }
+
+    if let year = entry.year {
+        print(year)                   // Int
+    }
+    print(entry["JOURNAL"] as Any)    // String?
+
+    return entry.with(field: "doi", value: doi)
+}
+```
+
+`citation(style:)` produces a compact, Markdown-flavored summary. It is not a
+CSL processor and does not claim publisher-level style conformance.
+
+### Convert LaTeX and inspect DOIs
+
+```swift
+import BibTeXKit
+
+let name = LaTeXConverter.toUnicode(#"M\"uller"#)
+let latex = LaTeXConverter.toLaTeX("Müller")
+
+let text = "Available at https://doi.org/10.1000/example."
+let doi = DOIDetector.extractDOI(from: text)
+let url = doi.flatMap { DOIDetector.doiURL(for: $0) }
+```
+
+DOI helpers parse, normalize, and construct resolver URLs. They never perform
+a network request.
+
+### Present BibTeX in SwiftUI
+
+```swift
+import BibTeXKit
 import SwiftUI
-import BibTeXKit
 
-struct ContentView: View {
-    let bibtex = """
-    @article{einstein1905,
-        author = {Albert Einstein},
-        title = {On the Electrodynamics of Moving Bodies},
-        journal = {Annalen der Physik},
-        year = {1905}
-    }
-    """
-    
+struct BibliographyEntryView: View {
+    let entry: BibTeXEntry
+
     var body: some View {
-        BibTeXView(bibtex: bibtex)
+        BibTeXView(entry: entry)
+            .preset(.full)
+            .bibTeXTheme(AdaptiveTheme())
+            .formattingStyle(.aligned)
     }
 }
 ```
 
-### Parse BibTeX
+`BibTeXText` renders highlighted content without metadata, borders, line
+numbers, or copy controls. `BibTeXView` accepts either source text or a parsed
+entry and can be configured with `BibTeXViewConfiguration` or focused view
+modifiers.
 
-```swift
-import BibTeXKit
+The copy action is available on iOS, macOS, Mac Catalyst, and visionOS. It is
+omitted on watchOS and tvOS.
 
-let bibtex = "@article{key, author = {John Doe}, title = {Example}}"
+## Architecture
 
-do {
-    let entries = try BibTeXParser.parse(bibtex)
-    
-    for entry in entries {
-        print("Type: \(entry.type)")        // article
-        print("Key: \(entry.key)")          // key
-        print("Author: \(entry.author)")    // John Doe
-    }
-} catch {
-    print("Parse error: \(error)")
-}
+```mermaid
+flowchart LR
+    A["BibTeX source"] --> B["Parser"]
+    B --> C["BibTeXEntry"]
+    C --> D["Validation and formatting"]
+    C --> E["DOI and citation summaries"]
+    A --> F["Tokenizer"]
+    F --> G["AttributedString highlighter"]
+    G --> H["BibTeXText and BibTeXView"]
 ```
 
-## 🎨 Customization
+The model and parsing layers are independent of presentation. Applications can
+use the complete bibliography core without constructing a view. The parser,
+tokenizer, DOI detector, and LaTeX converter use iterative pure-Swift scanners
+so hostile nesting does not translate into recursive stack growth.
 
-### View Modifiers
+Entry values canonicalize field lookup while providing total ordering,
+equality-consistent hashing, deterministic formatting, and `Codable` round
+trips. These properties make exact-output and round-trip tests useful
+indicators of semantic drift.
 
-BibTeXKit uses familiar SwiftUI view modifier patterns:
+The implementation applies the engineering principles described in
+Swift.org's
+[migration of TrueType hinting to Swift](https://www.swift.org/blog/migrating-truetype-hinting-to-swift/):
+preserve exact output, make ownership and lifetimes explicit, measure
+optimization, and use exhaustive coverage. Iterative bibliography scanners are
+a BibTeXKit-specific design decision.
 
-```swift
-BibTeXView(bibtex: myBibTeX)
-    .lineNumbers(true)
-    .bibTeXTheme(MonokaiTheme())
-    .copyButtonHidden()
-    .showMetadata(true)
-    .formattingStyle(.aligned)
-    .cornerRadius(12)
-    .maxHeight(400)
-```
+## Quality
 
-### Available Modifiers
+Behavioral tests use Swift Testing. XCTest remains only for release-mode
+`measure` probes. The suite specifies positive, negative, boundary,
+error-handling, concurrency, rendering, and regression behavior in
+Given/When/Then terms.
 
-| Modifier | Description |
-|----------|-------------|
-| `.bibTeXTheme(_:)` | Set syntax highlighting theme |
-| `.lineNumbers(_:)` | Show/hide line numbers |
-| `.copyButtonHidden(_:)` | Show/hide copy button |
-| `.copyButtonPosition(_:)` | Position: `.topTrailing`, `.bottomLeading`, etc. |
-| `.copyButtonStyle(_:)` | Style: `.iconOnly`, `.labeled`, `.compact` |
-| `.showMetadata(_:)` | Show entry type badge and field count |
-| `.formattingStyle(_:)` | `.standard`, `.compact`, `.minimal`, `.aligned` |
-| `.maxHeight(_:)` | Maximum height before scrolling |
-| `.minHeight(_:)` | Minimum height |
-| `.cornerRadius(_:)` | Container corner radius |
-| `.bordered(_:)` | Show/hide border |
-| `.textSelection(_:)` | Enable/disable text selection |
-| `.contentPadding(_:)` | Content padding |
-| `.preset(_:)` | Apply a configuration preset |
+The production and core quality gates require 100% line, function, and region
+coverage. The current Swift compiler does not emit branch counters for this
+package, so reports identify branch coverage as unavailable instead of
+substituting another metric. Scheduled mutation testing verifies that
+assertions distinguish observable changes in core behavior.
 
-### Built-in Themes
+CI treats Swift warnings as errors, runs the complete optimized suite and
+three sanitizer configurations, builds both package products for every
+supported platform, and validates every XCFramework slice with independent
+consumers.
 
-```swift
-BibTeXView(bibtex: bibtex)
-    .bibTeXTheme(DefaultLightTheme())   // Default light theme
-    .bibTeXTheme(DefaultDarkTheme())    // Default dark theme
-    .bibTeXTheme(XcodeLightTheme())     // Xcode light
-    .bibTeXTheme(XcodeDarkTheme())      // Xcode dark
-    .bibTeXTheme(MonokaiTheme())        // Monokai (dark)
-    .bibTeXTheme(SolarizedLightTheme()) // Solarized light
-    .bibTeXTheme(SolarizedDarkTheme())  // Solarized dark
-```
+The current source audit records:
 
-### Configuration Presets
+| Gate | Result |
+|---|---:|
+| Optimized tests | 560 passed |
+| Production and core coverage | 100% lines, functions, and regions |
+| Fresh mutation audit | 1,066 viable mutants killed; 2 compiler-rejected (0.19%); no survivors, timeouts, or uncovered mutants |
+| Sanitizers | Address, Undefined Behavior, and Thread Sanitizer passed with no findings |
 
-```swift
-// Minimal - just the content
-BibTeXView(bibtex: bibtex)
-    .preset(.minimal)
+See [Testing and quality](TESTING.md) for the exact commands, reports,
+thresholds, mutation policy, measured results, and known limits. Release-level
+changes are recorded in the [Changelog](CHANGELOG.md).
 
-// Compact - for tight spaces
-BibTeXView(bibtex: bibtex)
-    .preset(.compact)
+## Performance
 
-// Full - all features enabled
-BibTeXView(bibtex: bibtex)
-    .preset(.full)
+Parsing, tokenization, DOI detection, and LaTeX conversion use bounded,
+iterative scanners in their hot paths. Output buffers reserve capacity only
+where the estimate is safe, and highlighting applies attributes to one
+`AttributedString`.
 
-// Mobile - optimized for phones
-BibTeXView(bibtex: bibtex)
-    .preset(.mobile)
-```
+Release-mode probes track parser scaling, tokenization, DOI detection, LaTeX
+conversion, and highlighting. They report measurements rather than enforcing
+wall-clock thresholds on shared CI hardware. Exact behavior and expected
+progress remain deterministic gates.
 
-### Custom Themes
+On an Apple M5 Pro with Xcode 26.6, the warmed Release snapshot averaged
+1.58 ms to parse 100 entries, 1.83 ms to tokenize the same workload, and
+4.09 ms to extract 1,000 presented DOI links. These figures are directional,
+not performance guarantees. See the
+[complete measurement protocol and results](TESTING.md#performance-measurements).
 
-Create your own theme by conforming to `BibTeXTheme`:
+## Accessibility, privacy, and security
 
-```swift
-struct MyCustomTheme: BibTeXTheme {
-    let name = "My Theme"
-    let font = Font.system(size: 14, design: .monospaced)
-    let backgroundColor = Color(hex: "#1e1e1e")
-    let borderColor = Color.gray.opacity(0.3)
-    
-    func color(for token: BibTeXToken) -> Color {
-        switch token {
-        case .entryType: return Color(hex: "#ff6b6b")
-        case .citationKey: return Color(hex: "#4ecdc4")
-        case .fieldName: return Color(hex: "#45b7d1")
-        case .string: return Color(hex: "#96ceb4")
-        case .comment: return Color(hex: "#6c757d")
-        default: return Color(hex: "#f8f9fa")
-        }
-    }
-}
+`BibTeXView` uses semantic SwiftUI text and controls. The copy action has an
+accessibility label and hint, decorative line numbers are hidden from
+assistive technologies, built-in themes include light and dark variants, and
+system text styles participate in Dynamic Type. Syntax remains readable
+without color through its original text and line structure.
 
-// Use it
-BibTeXView(bibtex: bibtex)
-    .bibTeXTheme(MyCustomTheme())
-```
+BibTeXKit contains no analytics, telemetry, persistence, or networking. Input
+remains in process. The only system data write is the user-initiated copy
+action, which writes the displayed bibliography to the platform pasteboard.
 
-## 📖 Parsing Options
+Malformed-input, deep-nesting, and sanitizer tests exercise stack, memory,
+arithmetic, and concurrency safety. No finite suite can guarantee execution
+under unbounded memory pressure or operating-system termination; applications
+that accept remote files should apply limits appropriate to their threat
+model.
 
-### Parser Configuration
+Report vulnerabilities privately according to the
+[Security policy](SECURITY.md).
 
-```swift
-var options = BibTeXParser.Options()
-options.convertLaTeXToUnicode = true    // Convert \"{u} to ü
-options.normalizeFieldNames = true       // Lowercase field names
-options.stripDelimiters = true           // Remove extra whitespace
-options.preserveRawBibTeX = true         // Keep original string
+## Documentation
 
-let entries = try BibTeXParser.parse(bibtex, options: options)
-```
+| Document | Purpose |
+|---|---|
+| [Testing and quality](TESTING.md) | Local test, coverage, sanitizer, mutation, and CI reproduction |
+| [XCFramework distribution](DISTRIBUTION.md) | Source, dynamic, and precompiled integration; release artifact production |
+| [Changelog](CHANGELOG.md) | User-visible API, behavior, performance, and compatibility changes |
+| [Contributing](CONTRIBUTING.md) | Design, implementation, test, and pull-request standards |
+| [Security policy](SECURITY.md) | Supported versions, reporting, and trust boundaries |
+| [API quick reference](Agents.md) | Accurate public API guidance for people and coding agents |
 
-### Entry Properties
+## Project
 
-```swift
-let entry = entries.first!
+### Support
 
-// Convenience properties
-entry.author      // Author field
-entry.title       // Title field
-entry.year        // Year field
-entry.doi         // DOI field
-entry.journal     // Journal field
-entry.publisher   // Publisher field
+Use [GitHub Issues](https://github.com/ezefranca/BibTeXKit/issues) for
+reproducible defects and focused feature requests. Include the input, expected
+behavior, actual behavior, platform, and Xcode version, with sensitive
+bibliography data removed.
 
-// Subscript access (case-insensitive)
-entry["author"]   // Same as entry.author
-entry["TITLE"]    // Case insensitive
+### Direction
 
-// Author parsing
-entry.authors  // ["First Author", "Second Author"]
+Near-term work is limited to concrete BibTeX interoperability, measured
+performance, safety, and Apple-platform integration needs. A complete CSL
+engine and network-backed bibliography services remain outside the project
+scope unless a focused use case justifies their API and maintenance cost.
 
-// Validation
-let validation = entry.validate()
-validation.isValid           // true if all required fields present
-validation.missingRequired   // ["journal", "year"]
-validation.missingOptional   // ["volume", "pages"]
-```
+### Contributing
 
-### Entry Formatting
+Contributions are welcome when they include a clear behavioral case and tests
+at the appropriate layer. Read [Contributing](CONTRIBUTING.md) before opening
+a pull request.
 
-```swift
-// Different formatting styles
-entry.formatted(style: .standard)  // Standard indentation
-entry.formatted(style: .compact)   // Minimal whitespace
-entry.formatted(style: .minimal)   // Single line per field
-entry.formatted(style: .aligned)   // Aligned equals signs
+### License
 
-// Citation formatting
-entry.citation(style: .apa)      // APA format
-entry.citation(style: .mla)      // MLA format
-entry.citation(style: .chicago)  // Chicago format
-entry.citation(style: .ieee)     // IEEE format
-entry.citation(style: .harvard)  // Harvard format
-```
+BibTeXKit is available under the [MIT License](LICENSE).
 
-### Modifying Entries
-
-```swift
-// Create modified copies
-let updated = entry
-    .with(field: "note", value: "Important")
-    .with(key: "newkey")
-    .with(type: .book)
-    .with(fields: ["abstract": "...", "keywords": "..."])
-```
-
-## 🔤 LaTeX Conversion
-
-BibTeXKit includes comprehensive LaTeX to Unicode conversion:
-
-```swift
-import BibTeXKit
-
-// Accents
-LaTeXConverter.toUnicode("M\\\"uller")     // "Müller"
-LaTeXConverter.toUnicode("Caf\\'e")        // "Café"
-LaTeXConverter.toUnicode("\\~nino")        // "ñino"
-
-// Special characters
-LaTeXConverter.toUnicode("\\ss")           // "ß"
-LaTeXConverter.toUnicode("\\ae")           // "æ"
-
-// Greek letters
-LaTeXConverter.toUnicode("\\alpha")        // "α"
-LaTeXConverter.toUnicode("\\Omega")        // "Ω"
-
-// Math symbols
-LaTeXConverter.toUnicode("\\infty")        // "∞"
-LaTeXConverter.toUnicode("\\pm")           // "±"
-
-// Reverse conversion
-LaTeXConverter.toLaTeX("Müller")           // "M\\\"uller"
-```
-
-## 📱 Platform Support
-
-| Platform | Minimum Version |
-|----------|-----------------|
-| iOS | 17.0+ |
-| macOS | 14.0+ |
-| tvOS | 17.0+ |
-| watchOS | 9.0+ |
-| visionOS | 1.0+ |
-
-## 🏗️ Architecture
-
-```
-BibTeXKit/
-├── Models/
-│   ├── BibTeXEntry.swift        # Entry model
-│   └── BibTeXEntryType.swift    # Entry types enum
-├── Parsing/
-│   ├── BibTeXParser.swift       # Main parser
-│   ├── BibTeXTokenizer.swift    # Tokenizer
-│   ├── BibTeXToken.swift        # Token types
-│   └── LaTeXConverter.swift     # LaTeX ↔ Unicode
-├── Highlighting/
-│   ├── BibTeXTheme.swift        # Theme protocol + themes
-│   └── BibTeXHighlighter.swift  # AttributedString generator
-└── Views/
-    ├── BibTeXView.swift         # Main view component
-    ├── BibTeXText.swift         # Simple inline text
-    └── BibTeXViewConfiguration.swift  # Configuration
-```
-
-## 🧪 Testing
-
-BibTeXKit has comprehensive test coverage:
-
-```bash
-swift test
-```
-
-Run with coverage:
-
-```bash
-swift test --enable-code-coverage
-```
-
-## 📄 License
-
-BibTeXKit is available under the MIT license. See the [LICENSE](LICENSE) file for details.
-
-## 🧩 Used in Production
-
-BibTeXKit is used in **Auctorium**, a native iOS and macOS app for academic workflow management (submissions, venues, citations, and research artifacts).
-
-- App website: https://auctorium.app  
-
-The library powers BibTeX parsing, formatting, and display inside real-world research tooling.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a PR.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Write tests for your changes
-4. Ensure all tests pass
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-## 🤖 AI Contributing
-
-AI contributions are welcome! When submitting a PR, please add the model you used and the prompt to obtain that code. [Like this](https://github.com/ezefranca/BibTeXKit/pull/1)
-
-For AI agents looking to integrate with BibTeXKit, see the [Agent Guide](Agents.md) for comprehensive API documentation and usage patterns.
+BibTeXKit is an independent open-source project. It is not affiliated with,
+endorsed by, or approved by Apple Inc.

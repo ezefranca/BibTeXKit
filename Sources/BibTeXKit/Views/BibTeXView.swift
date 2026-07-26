@@ -5,6 +5,7 @@
 //  Copyright © 2025. MIT License.
 //
 
+import Observation
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
@@ -15,8 +16,10 @@ import AppKit
 
 /// A SwiftUI view that displays BibTeX with syntax highlighting.
 ///
-/// `BibTeXView` is a highly customizable, responsive view designed
-/// to display BibTeX entries beautifully on any Apple platform.
+/// `BibTeXView` presents raw or parsed BibTeX with configurable themes,
+/// line numbers, metadata, formatting, and copy behavior.
+/// Raw input is highlighted exactly as supplied. A parsed entry is formatted
+/// using ``BibTeXViewConfiguration/formattingStyle``.
 ///
 /// ## Basic Usage
 ///
@@ -35,7 +38,7 @@ import AppKit
 /// ## Customization
 ///
 /// ```swift
-/// BibTeXView(bibtex: myBibTeXString)
+/// BibTeXView(entry: entry)
 ///     .bibTeXTheme(MonokaiTheme())
 ///     .lineNumbers(true)
 ///     .copyButtonHidden()
@@ -51,14 +54,12 @@ public struct BibTeXView: View {
     
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    
-    @State private var copyFeedback = false
-    @State private var contentSize: CGSize = .zero
     
     // MARK: - Initialization
     
-    /// Creates a view displaying raw BibTeX.
+    /// Creates a view that highlights raw BibTeX without reformatting it.
+    ///
+    /// The configuration's formatting style is ignored.
     ///
     /// - Parameters:
     ///   - bibtex: The BibTeX string to display.
@@ -83,103 +84,100 @@ public struct BibTeXView: View {
     // MARK: - Body
     
     public var body: some View {
-        GeometryReader { geometry in
-            adaptiveContent(for: geometry.size)
-        }
-        .frame(minHeight: configuration.minHeight ?? 60)
-        .frame(maxHeight: configuration.maxHeight)
+        adaptiveContent(isCompact: isCompactLayout)
+        .frame(minHeight: configuration.renderedMinimumHeight)
+        .frame(maxHeight: configuration.renderedMaximumHeight)
     }
     
     // MARK: - Adaptive Content
     
     @ViewBuilder
-    private func adaptiveContent(for size: CGSize) -> some View {
-        let isCompact = isCompactLayout(for: size)
+    private func adaptiveContent(isCompact: Bool) -> some View {
+        let displayBibTeX = effectiveBibTeX
+        let theme = configuration.theme(for: colorScheme)
+        let lineSpacing = BibTeXViewLayoutMetrics.lineSpacing(
+            base: configuration.renderedLineSpacing,
+            isCompact: isCompact
+        )
         
-        ZStack(alignment: copyButtonAlignment) {
-            // Main content
-            contentContainer(isCompact: isCompact)
-            
-            // Copy button overlay
-            if configuration.showCopyButton {
-                copyButtonOverlay(isCompact: isCompact)
+        contentContainer(
+            bibtex: displayBibTeX,
+            theme: theme,
+            lineSpacing: lineSpacing,
+            isCompact: isCompact
+        )
+        .overlay(alignment: copyButtonAlignment) {
+            #if !os(watchOS) && !os(tvOS)
+            if configuration.showCopyButton,
+               configuration.copyButtonPosition != .inline {
+                BibTeXCopyButton(
+                    bibtex: displayBibTeX,
+                    theme: theme,
+                    style: configuration.copyButtonStyle,
+                    isCompact: isCompact
+                )
+                .padding(8)
             }
+            #endif
         }
     }
     
     @ViewBuilder
-    private func contentContainer(isCompact: Bool) -> some View {
-        let theme = configuration.theme(for: colorScheme)
-        
+    private func contentContainer(
+        bibtex: String,
+        theme: any BibTeXTheme,
+        lineSpacing: CGFloat,
+        isCompact: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Metadata header
+            #if !os(watchOS) && !os(tvOS)
+            if configuration.showCopyButton,
+               configuration.copyButtonPosition == .inline {
+                HStack {
+                    Spacer()
+                    BibTeXCopyButton(
+                        bibtex: bibtex,
+                        theme: theme,
+                        style: configuration.copyButtonStyle,
+                        isCompact: isCompact
+                    )
+                }
+                .padding(.horizontal, 8)
+            }
+            #endif
+
             if configuration.showMetadata, let entry = resolvedEntry {
                 metadataHeader(for: entry, theme: theme)
                 Divider()
                     .background(theme.borderColor.opacity(0.5))
             }
             
-            // BibTeX content
             ScrollView([.horizontal, .vertical], showsIndicators: true) {
                 HStack(alignment: .top, spacing: 0) {
-                    // Line numbers
                     if configuration.showLineNumbers {
-                        lineNumbersView(theme: theme)
+                        BibTeXLineNumbersView(
+                            bibtex: bibtex,
+                            font: theme.font,
+                            color: theme.lineNumberColor,
+                            lineSpacing: lineSpacing
+                        )
                             .padding(.trailing, 8)
                     }
                     
-                    // Highlighted content
-                    highlightedContent(theme: theme, isCompact: isCompact)
+                    BibTeXHighlightedContent(
+                        bibtex: bibtex,
+                        theme: theme,
+                        lineSpacing: lineSpacing,
+                        textSelectionEnabled: configuration.enableTextSelection
+                    )
                 }
-                .padding(configuration.contentPadding)
+                .padding(configuration.renderedContentPadding)
             }
         }
         .background(theme.backgroundColor)
-        .clipShape(RoundedRectangle(cornerRadius: configuration.cornerRadius))
+        .compositingGroup()
+        .clipShape(.rect(cornerRadius: configuration.renderedCornerRadius))
         .overlay(borderOverlay(theme: theme))
-    }
-    
-    // MARK: - Highlighted Content
-    
-    @ViewBuilder
-    private func highlightedContent(theme: any BibTeXTheme, isCompact: Bool) -> some View {
-        let highlighter = BibTeXHighlighter(theme: theme)
-        let displayBibtex = effectiveBibTeX
-        let attributed = highlighter.highlight(displayBibtex)
-        
-        if configuration.enableTextSelection {
-            Text(attributed)
-                .lineSpacing(lineSpacingValue(isCompact: isCompact))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            Text(attributed)
-                .lineSpacing(lineSpacingValue(isCompact: isCompact))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-    
-    // MARK: - Line Numbers
-    
-    @ViewBuilder
-    private func lineNumbersView(theme: any BibTeXTheme) -> some View {
-        let lines = effectiveBibTeX.components(separatedBy: .newlines)
-        
-        VStack(alignment: .trailing, spacing: 0) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { index, _ in
-                Text("\(index + 1)")
-                    .font(theme.font)
-                    .foregroundStyle(theme.lineNumberColor)
-                    .lineSpacing(configuration.lineSpacing)
-            }
-        }
-        .frame(minWidth: 30, alignment: .trailing)
-        .padding(.trailing, 8)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(theme.lineNumberColor.opacity(0.3))
-                .frame(width: 1)
-        }
     }
     
     // MARK: - Metadata Header
@@ -207,56 +205,11 @@ public struct BibTeXView: View {
             
             Spacer()
             
-            // Field count
-            Text("\(entry.fields.count) fields")
+            Text(fieldCountDescription(entry.fields.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(configuration.contentPadding)
-    }
-    
-    // MARK: - Copy Button
-    
-    @ViewBuilder
-    private func copyButtonOverlay(isCompact: Bool) -> some View {
-        Button(action: copyToClipboard) {
-            copyButtonContent(isCompact: isCompact)
-        }
-        .buttonStyle(.plain)
-        .padding(8)
-        .accessibilityLabel("Copy BibTeX")
-    }
-    
-    @ViewBuilder
-    private func copyButtonContent(isCompact: Bool) -> some View {
-        let theme = configuration.theme(for: colorScheme)
-        
-        Group {
-            switch configuration.copyButtonStyle {
-            case .iconOnly:
-                Image(systemName: copyFeedback ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: isCompact ? 14 : 16))
-            case .labeled:
-                Label(
-                    copyFeedback ? "Copied" : "Copy",
-                    systemImage: copyFeedback ? "checkmark" : "doc.on.doc"
-                )
-                .font(.caption)
-            case .compact:
-                Image(systemName: copyFeedback ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 12))
-            }
-        }
-        .foregroundStyle(copyFeedback ? .green : theme.color(for: .special))
-        .padding(isCompact ? 6 : 8)
-        .background {
-            if configuration.copyButtonStyle != .compact {
-                Circle()
-                    .fill(theme.backgroundColor)
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: copyFeedback)
+        .padding(configuration.renderedContentPadding)
     }
     
     // MARK: - Border Overlay
@@ -264,8 +217,11 @@ public struct BibTeXView: View {
     @ViewBuilder
     private func borderOverlay(theme: any BibTeXTheme) -> some View {
         if configuration.showBorder {
-            RoundedRectangle(cornerRadius: configuration.cornerRadius)
-                .stroke(theme.borderColor, lineWidth: configuration.borderWidth)
+            RoundedRectangle(
+                cornerRadius: configuration.renderedCornerRadius,
+                style: .continuous
+            )
+                .stroke(theme.borderColor, lineWidth: configuration.renderedBorderWidth)
         }
     }
     
@@ -295,44 +251,331 @@ public struct BibTeXView: View {
         }
     }
     
-    private func isCompactLayout(for size: CGSize) -> Bool {
+    private var isCompactLayout: Bool {
         #if os(iOS) || os(tvOS)
-        return horizontalSizeClass == .compact || size.width < 400
+        horizontalSizeClass == .compact
         #elseif os(watchOS)
-        return true
+        true
         #else
-        return size.width < 400
+        false
         #endif
     }
     
-    private func lineSpacingValue(isCompact: Bool) -> CGFloat {
-        let base = configuration.lineSpacing
-        return isCompact ? base * 0.8 : base
+    private func fieldCountDescription(_ count: Int) -> String {
+        count == 1 ? "1 field" : "\(count) fields"
     }
-    
-    private func copyToClipboard() {
-        let textToCopy = effectiveBibTeX
-        
-        #if os(iOS) || os(tvOS) || os(visionOS)
-        UIPasteboard.general.string = textToCopy
-        #elseif os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(textToCopy, forType: .string)
-        #elseif os(watchOS)
-        // watchOS doesn't have clipboard API
-        #endif
-        
-        withAnimation {
-            copyFeedback = true
+}
+
+// MARK: - Rendering Components
+
+private struct BibTeXHighlightedContent: View {
+    let bibtex: String
+    let theme: any BibTeXTheme
+    let lineSpacing: CGFloat
+    let textSelectionEnabled: Bool
+
+    @ViewBuilder
+    var body: some View {
+        #if os(iOS) || os(macOS) || os(visionOS)
+        if textSelectionEnabled {
+            highlightedText.textSelection(.enabled)
+        } else {
+            highlightedText.textSelection(.disabled)
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation {
-                copyFeedback = false
+        #else
+        highlightedText
+        #endif
+    }
+
+    private var highlightedText: some View {
+        Text(BibTeXHighlighter(theme: theme).highlight(bibtex))
+            .lineSpacing(lineSpacing)
+            .fixedSize(horizontal: false, vertical: true)
+            .tint(theme.selectionColor)
+    }
+}
+
+private struct BibTeXLineNumbersView: View {
+    let bibtex: String
+    let font: Font
+    let color: Color
+    let lineSpacing: CGFloat
+
+    var body: some View {
+        Text(BibTeXLineNumbers.text(for: bibtex))
+            .font(font)
+            .foregroundStyle(color)
+            .lineSpacing(lineSpacing)
+            .multilineTextAlignment(.trailing)
+            .fixedSize()
+            .frame(minWidth: 30, alignment: .trailing)
+            .padding(.trailing, 8)
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(color.opacity(0.3))
+                    .frame(width: 1)
             }
+            .accessibilityHidden(true)
+    }
+}
+
+enum BibTeXLineNumbers {
+    static func text(for bibtex: String) -> String {
+        var lineCount = 1
+        for character in bibtex where character.isNewline {
+            if lineCount < Int.max {
+                lineCount += 1
+            }
+        }
+
+        var result = String()
+        let (charactersPerLine, characterCountOverflowed) =
+            String(lineCount).count.addingReportingOverflow(1)
+        let (estimatedCapacity, capacityOverflowed) =
+            lineCount.multipliedReportingOverflow(by: charactersPerLine)
+        if !characterCountOverflowed, !capacityOverflowed {
+            result.reserveCapacity(estimatedCapacity)
+        }
+
+        for number in 1...lineCount {
+            if number > 1 {
+                result.append("\n")
+            }
+            result.append(String(number))
+        }
+        return result
+    }
+}
+
+enum BibTeXViewLayoutMetrics {
+    static func lineSpacing(base: CGFloat, isCompact: Bool) -> CGFloat {
+        isCompact ? base * 0.8 : base
+    }
+
+    static func copyButtonPadding(isCompact: Bool) -> CGFloat {
+        isCompact ? 6 : 8
+    }
+}
+
+#if !os(watchOS) && !os(tvOS)
+@MainActor
+protocol BibTeXPlatformPasteboard: AnyObject {
+    #if os(macOS)
+    @discardableResult
+    func clearContents() -> Int
+    func setString(_ string: String, forType dataType: NSPasteboard.PasteboardType) -> Bool
+    #else
+    var string: String? { get set }
+    #endif
+}
+
+#if os(macOS)
+extension NSPasteboard: BibTeXPlatformPasteboard {}
+#else
+extension UIPasteboard: BibTeXPlatformPasteboard {}
+#endif
+
+@MainActor
+struct BibTeXSystemClipboard {
+    enum WriteError: Error {
+        case rejected
+    }
+
+    private let pasteboard: any BibTeXPlatformPasteboard
+
+    init(
+        pasteboard: any BibTeXPlatformPasteboard = {
+            #if os(macOS)
+            NSPasteboard.general
+            #else
+            UIPasteboard.general
+            #endif
+        }()
+    ) {
+        self.pasteboard = pasteboard
+    }
+
+    func write(_ bibtex: String) throws {
+        #if os(macOS)
+        pasteboard.clearContents()
+        guard pasteboard.setString(bibtex, forType: .string) else {
+            throw WriteError.rejected
+        }
+        #else
+        pasteboard.string = bibtex
+        #endif
+    }
+}
+
+@MainActor
+@Observable
+final class BibTeXCopyFeedback {
+    typealias ClipboardWriter = @MainActor @Sendable (String) throws -> Void
+    typealias Sleeper = @Sendable (Duration) async throws -> Void
+
+    private final class ResetToken {}
+
+    private(set) var isCopied = false
+
+    private let feedbackDuration: Duration
+    private let clipboardWriter: ClipboardWriter
+    private let sleeper: Sleeper
+
+    @ObservationIgnored
+    private var feedbackResetTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var resetToken: ResetToken?
+
+    init(
+        feedbackDuration: Duration = .seconds(1.5),
+        clipboardWriter: @escaping ClipboardWriter = BibTeXSystemClipboard().write,
+        sleeper: @escaping Sleeper = BibTeXCopyFeedback.sleep
+    ) {
+        self.feedbackDuration = feedbackDuration
+        self.clipboardWriter = clipboardWriter
+        self.sleeper = sleeper
+    }
+
+    deinit {
+        feedbackResetTask?.cancel()
+    }
+
+    @discardableResult
+    func copy(_ bibtex: String) -> Bool {
+        do {
+            try clipboardWriter(bibtex)
+        } catch {
+            cancel()
+            return false
+        }
+
+        feedbackResetTask?.cancel()
+
+        let token = ResetToken()
+        let duration = feedbackDuration
+        let sleeper = sleeper
+        resetToken = token
+        isCopied = true
+
+        feedbackResetTask = Task { [weak self] in
+            do {
+                try await sleeper(duration)
+            } catch {
+                // Cancellation belongs to a replacement or disappearance.
+                // Other sleeper failures still clear feedback below.
+            }
+
+            guard let self, self.resetToken === token else {
+                return
+            }
+
+            self.feedbackResetTask = nil
+            self.resetToken = nil
+            self.isCopied = false
+        }
+        return true
+    }
+
+    func cancel() {
+        feedbackResetTask?.cancel()
+        feedbackResetTask = nil
+        resetToken = nil
+        isCopied = false
+    }
+
+    func waitForPendingReset() async {
+        let task = feedbackResetTask
+        await task?.value
+    }
+
+    private static func sleep(for duration: Duration) async throws {
+        try await Task.sleep(for: duration)
+    }
+}
+
+struct BibTeXCopyButton: View {
+    let bibtex: String
+    let theme: any BibTeXTheme
+    let style: BibTeXViewConfiguration.CopyButtonStyle
+    let isCompact: Bool
+
+    @State private var feedback: BibTeXCopyFeedback
+
+    init(
+        bibtex: String,
+        theme: any BibTeXTheme,
+        style: BibTeXViewConfiguration.CopyButtonStyle,
+        isCompact: Bool,
+        feedback: BibTeXCopyFeedback = BibTeXCopyFeedback()
+    ) {
+        self.bibtex = bibtex
+        self.theme = theme
+        self.style = style
+        self.isCompact = isCompact
+        self._feedback = State(initialValue: feedback)
+    }
+
+    var body: some View {
+        Button(action: copyToClipboard) {
+            label
+                .foregroundStyle(feedback.isCopied ? .green : theme.color(for: .special))
+                .padding(BibTeXViewLayoutMetrics.copyButtonPadding(isCompact: isCompact))
+                .frame(minWidth: 44, minHeight: 44)
+                .background {
+                    if style != .compact {
+                        if style == .labeled {
+                            Capsule()
+                                .fill(theme.backgroundColor)
+                                .shadow(
+                                    color: .black.opacity(0.1),
+                                    radius: 2,
+                                    y: 1
+                                )
+                        } else {
+                            Circle()
+                                .fill(theme.backgroundColor)
+                                .shadow(
+                                    color: .black.opacity(0.1),
+                                    radius: 2,
+                                    y: 1
+                                )
+                        }
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(feedback.isCopied ? "BibTeX copied" : "Copy BibTeX")
+        .accessibilityHint("Copies this entry to the clipboard")
+        .animation(.easeInOut(duration: 0.2), value: feedback.isCopied)
+        .onDisappear {
+            feedback.cancel()
+        }
+    }
+
+    func copyToClipboard() {
+        feedback.copy(bibtex)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        switch style {
+        case .iconOnly:
+            Image(systemName: feedback.isCopied ? "checkmark" : "doc.on.doc")
+                .font(isCompact ? .caption : .body)
+        case .labeled:
+            Label(
+                feedback.isCopied ? "Copied" : "Copy",
+                systemImage: feedback.isCopied ? "checkmark" : "doc.on.doc"
+            )
+            .font(.caption)
+        case .compact:
+            Image(systemName: feedback.isCopied ? "checkmark" : "doc.on.doc")
+                .font(.caption2)
         }
     }
 }
+#endif
 
 // MARK: - View Modifiers
 
@@ -380,7 +623,9 @@ extension BibTeXView {
         return copy
     }
     
-    /// Sets the BibTeX formatting style.
+    /// Sets the formatting style for a view created from a parsed entry.
+    ///
+    /// Raw input supplied to ``init(bibtex:configuration:)`` is unchanged.
     public func formattingStyle(_ style: BibTeXEntry.FormattingStyle) -> Self {
         var copy = self
         copy.configuration.formattingStyle = style
@@ -438,7 +683,9 @@ extension BibTeXView {
         return copy
     }
     
-    /// Applies a preset configuration.
+    /// Replaces the view's entire configuration with a preset.
+    ///
+    /// Modifiers applied before this call are discarded.
     public func preset(_ preset: BibTeXViewConfiguration) -> Self {
         var copy = self
         copy.configuration = preset
@@ -449,8 +696,7 @@ extension BibTeXView {
 // MARK: - Preview
 
 #if DEBUG
-struct BibTeXView_Previews: PreviewProvider {
-    static let sampleBibTeX = """
+private let bibTeXViewPreviewSample = """
     @article{einstein1905,
         author = {Albert Einstein},
         title = {Zur Elektrodynamik bewegter K\\"orper},
@@ -461,39 +707,34 @@ struct BibTeXView_Previews: PreviewProvider {
         doi = {10.1002/andp.19053221004}
     }
     """
-    
-    static var previews: some View {
-        Group {
-            // Default
-            BibTeXView(bibtex: sampleBibTeX)
-                .frame(height: 300)
-                .padding()
-                .previewDisplayName("Default")
-            
-            // With line numbers
-            BibTeXView(bibtex: sampleBibTeX)
-                .lineNumbers()
-                .showMetadata()
-                .frame(height: 350)
-                .padding()
-                .previewDisplayName("With Line Numbers")
-            
-            // Compact
-            BibTeXView(bibtex: sampleBibTeX)
-                .preset(.compact)
-                .frame(height: 200)
-                .padding()
-                .previewDisplayName("Compact")
-            
-            // Dark theme
-            BibTeXView(bibtex: sampleBibTeX)
-                .bibTeXTheme(MonokaiTheme())
-                .lineNumbers()
-                .frame(height: 300)
-                .padding()
-                .preferredColorScheme(.dark)
-                .previewDisplayName("Monokai Dark")
-        }
-    }
+
+#Preview("Default") {
+    BibTeXView(bibtex: bibTeXViewPreviewSample)
+        .frame(height: 300)
+        .padding()
+}
+
+#Preview("With line numbers") {
+    BibTeXView(bibtex: bibTeXViewPreviewSample)
+        .lineNumbers()
+        .showMetadata()
+        .frame(height: 350)
+        .padding()
+}
+
+#Preview("Compact") {
+    BibTeXView(bibtex: bibTeXViewPreviewSample)
+        .preset(.compact)
+        .frame(height: 200)
+        .padding()
+}
+
+#Preview("Monokai dark") {
+    BibTeXView(bibtex: bibTeXViewPreviewSample)
+        .bibTeXTheme(MonokaiTheme())
+        .lineNumbers()
+        .frame(height: 300)
+        .padding()
+        .preferredColorScheme(.dark)
 }
 #endif

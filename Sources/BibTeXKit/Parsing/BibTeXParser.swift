@@ -10,7 +10,11 @@ import Foundation
 /// A parser for BibTeX content.
 ///
 /// `BibTeXParser` converts raw BibTeX strings into structured
-/// `BibTeXEntry` objects.
+/// `BibTeXEntry` objects. Named constants declared by `@string` are
+/// resolved in subsequent entries; `@comment` and `@preamble` directives
+/// are validated but are not returned as bibliography entries. When a
+/// database repeats a citation key, comparison is case-insensitive and the
+/// first entry wins, matching BibTeX's whole-file identity rules.
 ///
 /// ## Parsing a Single Entry
 ///
@@ -54,7 +58,7 @@ public struct BibTeXParser: Sendable {
         /// The input string is empty.
         case emptyInput
         
-        /// No valid entries were found.
+        /// No bibliography entries were found after comments and directives were processed.
         case noEntriesFound
         
         /// The entry type is missing or invalid.
@@ -110,8 +114,15 @@ public struct BibTeXParser: Sendable {
         /// Whether to strip surrounding braces/quotes from values.
         public var stripDelimiters: Bool
         
-        /// Whether to convert LaTeX accents to Unicode.
+        /// Whether to convert supported LaTeX accents, commands, symbols, and
+        /// typography to Unicode.
         public var convertLaTeXToUnicode: Bool
+
+        /// Whether a nonempty input must contain at least one bibliography entry.
+        ///
+        /// When false, comment-only, directive-only, and other entry-free input
+        /// parses as an empty array, preserving standard BibTeX behavior.
+        public var requireEntries: Bool
         
         /// The default options.
         public static let `default` = Options()
@@ -121,19 +132,22 @@ public struct BibTeXParser: Sendable {
             preserveRawBibTeX: true,
             normalizeFieldNames: true,
             stripDelimiters: true,
-            convertLaTeXToUnicode: false
+            convertLaTeXToUnicode: false,
+            requireEntries: true
         )
         
         public init(
             preserveRawBibTeX: Bool = false,
             normalizeFieldNames: Bool = true,
             stripDelimiters: Bool = true,
-            convertLaTeXToUnicode: Bool = true
+            convertLaTeXToUnicode: Bool = true,
+            requireEntries: Bool = false
         ) {
             self.preserveRawBibTeX = preserveRawBibTeX
             self.normalizeFieldNames = normalizeFieldNames
             self.stripDelimiters = stripDelimiters
             self.convertLaTeXToUnicode = convertLaTeXToUnicode
+            self.requireEntries = requireEntries
         }
     }
     
@@ -183,325 +197,548 @@ public struct BibTeXParser: Sendable {
     /// - Returns: An array of parsed entries.
     /// - Throws: `BibTeXParser.Error` if parsing fails.
     public func parse(_ input: String) throws -> [BibTeXEntry] {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        var index = input.startIndex
+        while index < input.endIndex && input[index].isWhitespace {
+            input.formIndex(after: &index)
+        }
+
+        guard index < input.endIndex else {
             throw Error.emptyInput
         }
-        
+
         var entries: [BibTeXEntry] = []
-        var index = trimmed.startIndex
-        
-        while index < trimmed.endIndex {
-            // Skip whitespace and comments
-            index = skipWhitespaceAndComments(in: trimmed, from: index)
-            
-            guard index < trimmed.endIndex else { break }
-            
-            // Look for @ to start an entry
-            if trimmed[index] == "@" {
-                if let entry = try parseEntry(from: trimmed, startingAt: &index) {
+        var seenCitationKeys: Set<String> = []
+        var stringConstants: [String: String] = [:]
+
+        while true {
+            skipWhitespaceAndComments(in: input, at: &index)
+
+            guard index < input.endIndex else { break }
+
+            if input[index] == "@" {
+                if let entry = try parseElement(
+                    from: input,
+                    at: &index,
+                    stringConstants: &stringConstants
+                ), seenCitationKeys.insert(
+                    entry.citationKey.lowercased()
+                ).inserted {
                     entries.append(entry)
                 }
             } else {
-                index = trimmed.index(after: index)
+                input.formIndex(after: &index)
             }
         }
-        
+
+        guard !entries.isEmpty || !options.requireEntries else {
+            throw Error.noEntriesFound
+        }
+
         return entries
     }
-    
+
     // MARK: - Private Methods
-    
-    private func skipWhitespaceAndComments(in input: String, from index: String.Index) -> String.Index {
-        var current = index
-        
-        while current < input.endIndex {
-            let char = input[current]
-            
+
+    private func skipWhitespaceAndComments(in input: String, at index: inout String.Index) {
+        while index < input.endIndex {
+            let char = input[index]
+
             if char.isWhitespace {
-                current = input.index(after: current)
+                input.formIndex(after: &index)
             } else if char == "%" {
-                // Skip to end of line
-                while current < input.endIndex && input[current] != "\n" {
-                    current = input.index(after: current)
-                }
+                repeat {
+                    input.formIndex(after: &index)
+                } while index < input.endIndex && !input[index].isNewline
             } else {
                 break
             }
         }
-        
-        return current
     }
-    
-    private func parseEntry(from input: String, startingAt index: inout String.Index) throws -> BibTeXEntry? {
+
+    private func parseElement(
+        from input: String,
+        at index: inout String.Index,
+        stringConstants: inout [String: String]
+    ) throws -> BibTeXEntry? {
         let entryStart = index
-        
-        // Consume @
-        guard input[index] == "@" else { return nil }
-        index = input.index(after: index)
-        
-        // Parse entry type
+
+        // The scanner calls this method only after recognizing an entry marker.
+        input.formIndex(after: &index)
+        skipWhitespaceAndComments(in: input, at: &index)
+
         let typeStart = index
-        while index < input.endIndex && input[index].isLetter {
-            index = input.index(after: index)
+        guard index < input.endIndex,
+              isIdentifierStartCharacter(input[index]) else {
+            throw Error.invalidEntryType(position: offset(of: typeStart, in: input))
         }
-        
+        while index < input.endIndex && isIdentifierCharacter(input[index]) {
+            input.formIndex(after: &index)
+        }
+
         let typeName = String(input[typeStart..<index])
-        guard !typeName.isEmpty else {
-            throw Error.invalidEntryType(position: input.distance(from: input.startIndex, to: typeStart))
-        }
-        
-        let entryType = BibTeXEntryType(rawValue: typeName)
-        
-        // Skip whitespace
-        index = skipWhitespaceAndComments(in: input, from: index)
-        
-        // Expect opening brace or parenthesis
-        guard index < input.endIndex else {
-            throw Error.missingOpeningBrace(position: input.distance(from: input.startIndex, to: index))
-        }
-        
-        let openingBrace = input[index]
-        guard openingBrace == "{" || openingBrace == "(" else {
-            throw Error.missingOpeningBrace(position: input.distance(from: input.startIndex, to: index))
-        }
-        
-        let closingBrace: Character = openingBrace == "{" ? "}" : ")"
-        index = input.index(after: index)
-        
-        // Handle special entries (@preamble, @string, @comment)
-        if typeName.lowercased() == "comment" {
-            // Skip to closing brace
-            var depth = 1
-            while index < input.endIndex && depth > 0 {
-                if input[index] == openingBrace { depth += 1 }
-                if input[index] == closingBrace { depth -= 1 }
-                index = input.index(after: index)
+        let normalizedType = typeName.lowercased()
+
+        skipWhitespaceAndComments(in: input, at: &index)
+
+        if normalizedType == "comment" {
+            if index < input.endIndex,
+               input[index] == "{" || input[index] == "(" {
+                let openingDelimiter = input[index]
+                let openingIndex = index
+                let closingDelimiter: Character = openingDelimiter == "{" ? "}" : ")"
+                input.formIndex(after: &index)
+                try skipBalancedBody(
+                    in: input,
+                    at: &index,
+                    openingDelimiter: openingDelimiter,
+                    closingDelimiter: closingDelimiter,
+                    openingIndex: openingIndex
+                )
             }
             return nil
         }
-        
-        // Skip whitespace
-        index = skipWhitespaceAndComments(in: input, from: index)
-        
-        // Parse citation key
+
+        guard index < input.endIndex else {
+            throw Error.missingOpeningBrace(position: offset(of: index, in: input))
+        }
+
+        let openingDelimiter = input[index]
+        guard openingDelimiter == "{" || openingDelimiter == "(" else {
+            throw Error.missingOpeningBrace(position: offset(of: index, in: input))
+        }
+
+        let openingIndex = index
+        let closingDelimiter: Character = openingDelimiter == "{" ? "}" : ")"
+        input.formIndex(after: &index)
+
+        switch normalizedType {
+        case "preamble":
+            try parsePreambleDirective(
+                from: input,
+                at: &index,
+                closingDelimiter: closingDelimiter,
+                openingIndex: openingIndex,
+                stringConstants: stringConstants
+            )
+            return nil
+        case "string":
+            try parseStringDirective(
+                from: input,
+                at: &index,
+                closingDelimiter: closingDelimiter,
+                openingIndex: openingIndex,
+                stringConstants: &stringConstants
+            )
+            return nil
+        default:
+            break
+        }
+
+        skipWhitespaceAndComments(in: input, at: &index)
+
         let keyStart = index
         while index < input.endIndex {
             let char = input[index]
-            if char == "," || char == closingBrace || char.isWhitespace {
+            if char == ","
+                || (openingDelimiter == "{" && char == closingDelimiter)
+                || char.isWhitespace
+                || char == "%" {
                 break
             }
-            index = input.index(after: index)
+            input.formIndex(after: &index)
         }
-        
-        let citationKey = String(input[keyStart..<index]).trimmingCharacters(in: .whitespaces)
-        
-        if citationKey.isEmpty && typeName.lowercased() != "preamble" && typeName.lowercased() != "string" {
+
+        guard keyStart != index else {
             throw Error.missingCitationKey(
                 entryType: typeName,
-                position: input.distance(from: input.startIndex, to: keyStart)
+                position: offset(of: keyStart, in: input)
             )
         }
-        
-        // Skip whitespace and comma
-        index = skipWhitespaceAndComments(in: input, from: index)
-        if index < input.endIndex && input[index] == "," {
-            index = input.index(after: index)
+
+        let citationKey = String(input[keyStart..<index])
+        skipWhitespaceAndComments(in: input, at: &index)
+
+        guard index < input.endIndex else {
+            throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
         }
-        
-        // Parse fields
+
+        if input[index] == closingDelimiter {
+            input.formIndex(after: &index)
+            return makeEntry(
+                typeName: typeName,
+                citationKey: citationKey,
+                fields: [:],
+                rawRange: entryStart..<index,
+                input: input
+            )
+        }
+
+        guard input[index] == "," else {
+            throw Error.unexpectedCharacter(
+                character: input[index],
+                position: offset(of: index, in: input)
+            )
+        }
+        input.formIndex(after: &index)
+
         var fields: [String: String] = [:]
-        
-        while index < input.endIndex && input[index] != closingBrace {
-            index = skipWhitespaceAndComments(in: input, from: index)
-            
-            guard index < input.endIndex && input[index] != closingBrace else { break }
-            
-            // Parse field name
-            let fieldStart = index
-            while index < input.endIndex {
-                let char = input[index]
-                if char == "=" || char.isWhitespace {
-                    break
-                }
-                index = input.index(after: index)
+        var seenFieldNames: Set<String> = []
+
+        while true {
+            skipWhitespaceAndComments(in: input, at: &index)
+
+            guard index < input.endIndex else {
+                throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
             }
-            
+
+            if input[index] == closingDelimiter {
+                input.formIndex(after: &index)
+                break
+            }
+
+            let fieldStart = index
+            guard isIdentifierStartCharacter(input[index]) else {
+                throw Error.unexpectedCharacter(
+                    character: input[index],
+                    position: offset(of: index, in: input)
+                )
+            }
+            while index < input.endIndex && isIdentifierCharacter(input[index]) {
+                input.formIndex(after: &index)
+            }
+
             var fieldName = String(input[fieldStart..<index])
             if options.normalizeFieldNames {
                 fieldName = fieldName.lowercased()
             }
-            
-            guard !fieldName.isEmpty else {
-                index = skipWhitespaceAndComments(in: input, from: index)
-                if index < input.endIndex && input[index] == "," {
-                    index = input.index(after: index)
-                }
-                continue
+
+            skipWhitespaceAndComments(in: input, at: &index)
+
+            guard index < input.endIndex else {
+                throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
             }
-            
-            // Skip whitespace
-            index = skipWhitespaceAndComments(in: input, from: index)
-            
-            // Expect =
-            guard index < input.endIndex && input[index] == "=" else {
-                continue
+
+            guard input[index] == "=" else {
+                throw Error.unexpectedCharacter(
+                    character: input[index],
+                    position: offset(of: index, in: input)
+                )
             }
-            index = input.index(after: index)
-            
-            // Skip whitespace
-            index = skipWhitespaceAndComments(in: input, from: index)
-            
-            // Parse field value
-            let value = try parseFieldValue(from: input, at: &index, closingBrace: closingBrace)
-            
-            // Process value
-            var processedValue = value
+            input.formIndex(after: &index)
+
+            skipWhitespaceAndComments(in: input, at: &index)
+            var processedValue = try parseFieldValue(
+                from: input,
+                at: &index,
+                fieldName: fieldName,
+                outerClosingDelimiter: closingDelimiter,
+                stringConstants: stringConstants
+            )
+
             if options.stripDelimiters {
-                processedValue = stripDelimiters(from: processedValue)
+                processedValue = trimmingBoundaryWhitespace(from: processedValue)
             }
-            if options.convertLaTeXToUnicode {
-                processedValue = LaTeXConverter.toUnicode(processedValue)
+            if options.convertLaTeXToUnicode && mayContainLaTeXSyntax(processedValue) {
+                processedValue = LaTeXConverter.toUnicode(
+                    processedValue,
+                    preservingGroupingBraces: true
+                )
             }
-            
-            fields[fieldName] = processedValue
-            
-            // Skip whitespace and comma
-            index = skipWhitespaceAndComments(in: input, from: index)
-            if index < input.endIndex && input[index] == "," {
-                index = input.index(after: index)
+
+            if seenFieldNames.insert(fieldName.lowercased()).inserted {
+                fields[fieldName] = processedValue
+            }
+
+            skipWhitespaceAndComments(in: input, at: &index)
+
+            guard index < input.endIndex else {
+                throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
+            }
+
+            if input[index] == "," {
+                input.formIndex(after: &index)
+            } else if input[index] != closingDelimiter {
+                throw Error.unexpectedCharacter(
+                    character: input[index],
+                    position: offset(of: index, in: input)
+                )
             }
         }
-        
-        // Consume closing brace
-        if index < input.endIndex && input[index] == closingBrace {
-            index = input.index(after: index)
-        }
-        
-        // Extract raw BibTeX if needed
-        let rawBibTeX = options.preserveRawBibTeX
-            ? String(input[entryStart..<index])
-            : nil
-        
-        return BibTeXEntry(
-            type: entryType,
+
+        return makeEntry(
+            typeName: typeName,
             citationKey: citationKey,
             fields: fields,
-            rawBibTeX: rawBibTeX
+            rawRange: entryStart..<index,
+            input: input
         )
     }
-    
+
+    private func parsePreambleDirective(
+        from input: String,
+        at index: inout String.Index,
+        closingDelimiter: Character,
+        openingIndex: String.Index,
+        stringConstants: [String: String]
+    ) throws {
+        skipWhitespaceAndComments(in: input, at: &index)
+
+        _ = try parseFieldValue(
+            from: input,
+            at: &index,
+            fieldName: "preamble",
+            outerClosingDelimiter: closingDelimiter,
+            stringConstants: stringConstants
+        )
+
+        skipWhitespaceAndComments(in: input, at: &index)
+        guard index < input.endIndex else {
+            throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
+        }
+        guard input[index] == closingDelimiter else {
+            throw Error.unexpectedCharacter(
+                character: input[index],
+                position: offset(of: index, in: input)
+            )
+        }
+        input.formIndex(after: &index)
+    }
+
+    private func parseStringDirective(
+        from input: String,
+        at index: inout String.Index,
+        closingDelimiter: Character,
+        openingIndex: String.Index,
+        stringConstants: inout [String: String]
+    ) throws {
+        skipWhitespaceAndComments(in: input, at: &index)
+
+        guard index < input.endIndex else {
+            throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
+        }
+
+        let nameStart = index
+        guard isIdentifierStartCharacter(input[index]) else {
+            throw Error.invalidFieldValue(
+                field: "string",
+                position: offset(of: index, in: input)
+            )
+        }
+        while index < input.endIndex && isIdentifierCharacter(input[index]) {
+            input.formIndex(after: &index)
+        }
+
+        let name = String(input[nameStart..<index]).lowercased()
+        skipWhitespaceAndComments(in: input, at: &index)
+
+        guard index < input.endIndex else {
+            throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
+        }
+        guard input[index] == "=" else {
+            throw Error.unexpectedCharacter(
+                character: input[index],
+                position: offset(of: index, in: input)
+            )
+        }
+        input.formIndex(after: &index)
+        skipWhitespaceAndComments(in: input, at: &index)
+
+        var value = try parseFieldValue(
+            from: input,
+            at: &index,
+            fieldName: name,
+            outerClosingDelimiter: closingDelimiter,
+            stringConstants: stringConstants
+        )
+        if options.stripDelimiters {
+            value = trimmingBoundaryWhitespace(from: value)
+        }
+        if options.convertLaTeXToUnicode && mayContainLaTeXSyntax(value) {
+            value = LaTeXConverter.toUnicode(
+                value,
+                preservingGroupingBraces: true
+            )
+        }
+
+        skipWhitespaceAndComments(in: input, at: &index)
+        if index < input.endIndex && input[index] == "," {
+            input.formIndex(after: &index)
+            skipWhitespaceAndComments(in: input, at: &index)
+        }
+
+        guard index < input.endIndex else {
+            throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
+        }
+        guard input[index] == closingDelimiter else {
+            throw Error.unexpectedCharacter(
+                character: input[index],
+                position: offset(of: index, in: input)
+            )
+        }
+        input.formIndex(after: &index)
+        stringConstants[name] = value
+    }
+
     private func parseFieldValue(
         from input: String,
         at index: inout String.Index,
-        closingBrace: Character
+        fieldName: String,
+        outerClosingDelimiter: Character,
+        stringConstants: [String: String]
     ) throws -> String {
+        let valueStart = index
         var value = ""
-        
-        while index < input.endIndex {
-            let char = input[index]
-            
-            if char == "," || char == closingBrace {
-                break
-            } else if char == "\"" {
-                // Quoted string
-                value += parseQuotedString(from: input, at: &index)
-            } else if char == "{" {
-                // Braced string
-                value += parseBracedString(from: input, at: &index)
-            } else if char == "#" {
-                // String concatenation
-                index = input.index(after: index)
-                index = skipWhitespaceAndComments(in: input, from: index)
-            } else if char.isNumber {
-                // Bare number
-                value += parseNumber(from: input, at: &index)
-            } else if char.isLetter {
-                // String constant
-                value += parseConstant(from: input, at: &index)
-            } else if char.isWhitespace {
-                index = input.index(after: index)
-            } else {
-                index = input.index(after: index)
+
+        while true {
+            skipWhitespaceAndComments(in: input, at: &index)
+
+            guard index < input.endIndex,
+                  input[index] != ",",
+                  input[index] != outerClosingDelimiter else {
+                throw Error.invalidFieldValue(
+                    field: fieldName,
+                    position: offset(of: valueStart, in: input)
+                )
             }
+
+            let component: String
+            switch input[index] {
+            case "\"":
+                component = try parseQuotedString(
+                    from: input,
+                    at: &index,
+                    fieldName: fieldName
+                )
+            case "{":
+                component = try parseBracedString(from: input, at: &index)
+            default:
+                component = try parseBareValue(
+                    from: input,
+                    at: &index,
+                    fieldName: fieldName,
+                    stringConstants: stringConstants
+                )
+            }
+
+            value.append(contentsOf: component)
+
+            skipWhitespaceAndComments(in: input, at: &index)
+            guard index < input.endIndex else {
+                break
+            }
+            guard input[index] == "#" else {
+                break
+            }
+            input.formIndex(after: &index)
         }
-        
+
         return value
     }
-    
-    private func parseQuotedString(from input: String, at index: inout String.Index) -> String {
-        guard input[index] == "\"" else { return "" }
-        
-        var result = "\""
-        index = input.index(after: index)
-        var escaped = false
-        
+
+    private func parseQuotedString(
+        from input: String,
+        at index: inout String.Index,
+        fieldName: String
+    ) throws -> String {
+        let openingIndex = index
+        input.formIndex(after: &index)
+        let contentStart = index
+        var braceDepth = 0
+
         while index < input.endIndex {
             let char = input[index]
-            result.append(char)
-            
-            if escaped {
-                escaped = false
-            } else if char == "\\" {
-                escaped = true
-            } else if char == "\"" {
-                index = input.index(after: index)
-                break
+
+            if char == "{" {
+                braceDepth += 1
+            } else if char == "}" {
+                guard braceDepth > 0 else {
+                    throw Error.invalidFieldValue(
+                        field: fieldName,
+                        position: offset(of: openingIndex, in: input)
+                    )
+                }
+                braceDepth -= 1
+            } else if char == "\"", braceDepth == 0 {
+                let contentEnd = index
+                input.formIndex(after: &index)
+                return options.stripDelimiters
+                    ? String(input[contentStart..<contentEnd])
+                    : String(input[openingIndex..<index])
             }
-            index = input.index(after: index)
+            input.formIndex(after: &index)
         }
-        
-        return result
+
+        throw Error.invalidFieldValue(
+            field: fieldName,
+            position: offset(of: openingIndex, in: input)
+        )
     }
-    
-    private func parseBracedString(from input: String, at index: inout String.Index) -> String {
-        guard input[index] == "{" else { return "" }
-        
-        var result = "{"
-        index = input.index(after: index)
+
+    private func parseBracedString(
+        from input: String,
+        at index: inout String.Index
+    ) throws -> String {
+        let openingIndex = index
+        input.formIndex(after: &index)
+        let contentStart = index
         var depth = 1
-        
-        while index < input.endIndex && depth > 0 {
+
+        while index < input.endIndex {
             let char = input[index]
-            result.append(char)
-            
+
             if char == "{" {
                 depth += 1
             } else if char == "}" {
                 depth -= 1
+                if depth == 0 {
+                    let contentEnd = index
+                    input.formIndex(after: &index)
+                    return options.stripDelimiters
+                        ? String(input[contentStart..<contentEnd])
+                        : String(input[openingIndex..<index])
+                }
             }
-            index = input.index(after: index)
+            input.formIndex(after: &index)
         }
-        
-        return result
+
+        throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
     }
-    
-    private func parseNumber(from input: String, at index: inout String.Index) -> String {
-        var result = ""
-        
-        while index < input.endIndex && input[index].isNumber {
-            result.append(input[index])
-            index = input.index(after: index)
-        }
-        
-        return result
-    }
-    
-    private func parseConstant(from input: String, at index: inout String.Index) -> String {
-        var result = ""
-        
-        while index < input.endIndex {
-            let char = input[index]
-            if char.isLetter || char.isNumber || char == "_" {
-                result.append(char)
-                index = input.index(after: index)
-            } else {
-                break
+
+    private func parseBareValue(
+        from input: String,
+        at index: inout String.Index,
+        fieldName: String,
+        stringConstants: [String: String]
+    ) throws -> String {
+        let start = index
+
+        if input[index].isNumber {
+            while index < input.endIndex && input[index].isNumber {
+                input.formIndex(after: &index)
             }
+        } else if isIdentifierStartCharacter(input[index]) {
+            while index < input.endIndex && isIdentifierCharacter(input[index]) {
+                input.formIndex(after: &index)
+            }
+        } else {
+            throw Error.invalidFieldValue(
+                field: fieldName,
+                position: offset(of: index, in: input)
+            )
         }
-        
-        // Expand known constants
-        switch result.lowercased() {
+
+        let rawValue = String(input[start..<index])
+        if let constant = stringConstants[rawValue.lowercased()] {
+            return constant
+        }
+        if let month = expandedMonth(named: rawValue) {
+            return month
+        }
+        return rawValue
+    }
+
+    private func expandedMonth(named value: String) -> String? {
+        switch value.lowercased() {
         case "jan": return "January"
         case "feb": return "February"
         case "mar": return "March"
@@ -514,25 +751,116 @@ public struct BibTeXParser: Sendable {
         case "oct": return "October"
         case "nov": return "November"
         case "dec": return "December"
-        default: return result
+        default: return nil
         }
     }
-    
-    private func stripDelimiters(from value: String) -> String {
-        var result = value.trimmingCharacters(in: .whitespaces)
-        
-        // Strip outer quotes
-        if result.hasPrefix("\"") && result.hasSuffix("\"") && result.count >= 2 {
-            result = String(result.dropFirst().dropLast())
-            result = result.trimmingCharacters(in: .whitespaces)
+
+    private func skipBalancedBody(
+        in input: String,
+        at index: inout String.Index,
+        openingDelimiter: Character,
+        closingDelimiter: Character,
+        openingIndex: String.Index
+    ) throws {
+        var depth = 1
+
+        while index < input.endIndex {
+            let char = input[index]
+
+            if char == openingDelimiter {
+                depth += 1
+            } else if char == closingDelimiter {
+                depth -= 1
+                input.formIndex(after: &index)
+                if depth == 0 {
+                    return
+                }
+                continue
+            }
+            input.formIndex(after: &index)
         }
-        
-        // Strip outer braces
-        if result.hasPrefix("{") && result.hasSuffix("}") && result.count >= 2 {
-            result = String(result.dropFirst().dropLast())
-            result = result.trimmingCharacters(in: .whitespaces)
+
+        throw Error.unmatchedBraces(position: offset(of: openingIndex, in: input))
+    }
+
+    private func makeEntry(
+        typeName: String,
+        citationKey: String,
+        fields: [String: String],
+        rawRange: Range<String.Index>,
+        input: String
+    ) -> BibTeXEntry {
+        BibTeXEntry(
+            type: BibTeXEntryType(rawValue: typeName),
+            citationKey: citationKey,
+            fields: fields,
+            rawBibTeX: options.preserveRawBibTeX ? String(input[rawRange]) : nil
+        )
+    }
+
+    private func trimmingBoundaryWhitespace(from value: String) -> String {
+        var lowerBound = value.startIndex
+        while lowerBound < value.endIndex, value[lowerBound].isWhitespace {
+            value.formIndex(after: &lowerBound)
         }
-        
-        return result
+
+        var upperBound = value.endIndex
+        while upperBound > lowerBound {
+            let previousIndex = value.index(before: upperBound)
+            guard value[previousIndex].isWhitespace else { break }
+            upperBound = previousIndex
+        }
+
+        return String(value[lowerBound..<upperBound])
+    }
+
+    private func isIdentifierCharacter(_ character: Character) -> Bool {
+        guard !character.isWhitespace, character.unicodeScalars.allSatisfy({
+            switch $0.properties.generalCategory {
+            case .control, .format, .surrogate, .privateUse, .unassigned,
+                 .lineSeparator, .paragraphSeparator:
+                return false
+            default:
+                return true
+            }
+        }) else {
+            return false
+        }
+
+        switch character {
+        case "\"", "#", "%", "'", "(", ")", ",", "=", "{", "}":
+            return false
+        default:
+            return true
+        }
+    }
+
+    private func isIdentifierStartCharacter(_ character: Character) -> Bool {
+        !character.isNumber && isIdentifierCharacter(character)
+    }
+
+    /// A low-cost preflight used to avoid invoking the converter for plain
+    /// values. Internal visibility keeps this performance contract directly
+    /// testable without making it part of the public API.
+    func mayContainLaTeXSyntax(_ value: String) -> Bool {
+        var previousByte: UInt8?
+
+        for byte in value.utf8 {
+            switch byte {
+            case 0x5C, 0x60, 0x7B, 0x7D:
+                return true
+            case 0x27 where previousByte == byte:
+                return true
+            case 0x2D where previousByte == byte:
+                return true
+            default:
+                previousByte = byte
+            }
+        }
+        return false
+    }
+
+    private func offset(of index: String.Index, in input: String) -> Int {
+        input.distance(from: input.startIndex, to: index)
     }
 }

@@ -1,0 +1,32 @@
+# Mutation testing is intentionally focused on model, parsing, and configuration
+# decisions for which this tool produces behaviorally distinguishable mutants.
+# The rendering/highlighting surface and release metadata remain covered by
+# exact API, palette, attributed-text, regression, and ImageRenderer tests, but
+# are excluded here because this mutator predominantly produces unviable or
+# visually equivalent changes in those files.
+timeout: 30
+concurrency: 2
+sources-path: Sources/BibTeXKit
+testing-framework: swift-testing
+test-target: BibTeXKitTests
+exclude:
+  # swift-mutation-testing 1.3.0 applies exclusions as path substrings.
+  - "/BibTeXKit.swift"
+  - "/Parsing/BibTeXToken.swift"
+  - "/Highlighting/BibTeXHighlighter.swift"
+  - "/Highlighting/BibTeXTheme.swift"
+  - "/Views/BibTeXText.swift"
+  - "/Views/BibTeXView.swift"
+
+# Operators are selected from empirical fresh-run baselines. SwapTernary
+# produced no viable Swift mutants (27/27 unviable), and arithmetic replacement
+# produced 19/21 unviable mutants plus one behavior-equivalent capacity change.
+# RemoveSideEffects generated 20 non-advancing tokenizer timeouts and broad
+# deletions of hashing/capacity/index statements; exact output and progress
+# assertions cover those contracts more precisely. The selected operators
+# exercise observable decisions without those tool artifacts.
+operators:
+  - RelationalOperatorReplacement
+  - BooleanLiteralReplacement
+  - LogicalOperatorReplacement
+  - NegateConditional
