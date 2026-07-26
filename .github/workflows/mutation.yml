@@ -29,6 +29,7 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
   SWIFT_DETERMINISTIC_HASHING: "1"
   MUTATION_TOOL_COMMIT: 8d8d03e28f06665c3fc6f36ccdc7cac244a584f6
+  MUTATION_SWIFT_SYNTAX_VERSION: 603.0.2
   MUTATION_SWIFT_SYNTAX_COMMIT: 79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1
 
 jobs:
@@ -59,15 +60,19 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/swift-mutation-testing/.build
-          key: mutation-tool-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-8d8d03e28f06665c3fc6f36ccdc7cac244a584f6-79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1
+          key: mutation-tool-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-8d8d03e28f06665c3fc6f36ccdc7cac244a584f6-603.0.2-79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1
 
-      - name: Pin mutation-tool dependencies
+      - name: Resolve and verify mutation-tool dependencies
         run: |
-          swift package --package-path "${MUTATION_TOOL_ROOT}" resolve \
-            swift-syntax \
+          swift package --package-path "${MUTATION_TOOL_ROOT}" resolve
+          python3 Scripts/check_package_pin.py \
+            "${MUTATION_TOOL_ROOT}/Package.resolved" \
+            --schema-version 3 \
+            --identity swift-syntax \
+            --kind remoteSourceControl \
+            --location https://github.com/apple/swift-syntax.git \
+            --version "${MUTATION_SWIFT_SYNTAX_VERSION}" \
             --revision "${MUTATION_SWIFT_SYNTAX_COMMIT}"
-          grep -Fq "${MUTATION_SWIFT_SYNTAX_COMMIT}" \
-            "${MUTATION_TOOL_ROOT}/Package.resolved"
 
       - name: Build mutation tool
         run: >-
@@ -80,7 +85,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: .swift-mutation-testing-cache
-          key: mutation-results-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-8d8d03e28f06665c3fc6f36ccdc7cac244a584f6-${{ hashFiles('.swift-mutation-testing.yml', 'Package.swift', 'Package.resolved', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
+          key: mutation-results-${{ runner.os }}-${{ runner.arch }}-xcode-26.6-8d8d03e28f06665c3fc6f36ccdc7cac244a584f6-603.0.2-79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1-${{ hashFiles('.swift-mutation-testing.yml', 'Package.swift', 'Package.resolved', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
 
       - name: Run and enforce mutation testing
         env:

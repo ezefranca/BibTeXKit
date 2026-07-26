@@ -8,7 +8,7 @@ The final 1.1.0 source has:
 
 - 554 Swift Testing cases in 28 suites;
 - six XCTest performance probes;
-- 19 Python tests for coverage, mutation, and distribution tooling.
+- 22 Python tests for coverage, mutation, and distribution tooling.
 
 All tests are deterministic, isolated, independent of execution order, and
 safe to run in parallel.
@@ -187,7 +187,7 @@ based threshold before making it a required gate.
 Mutation testing uses
 [`swift-mutation-testing` 1.3.0](https://github.com/ericodx/swift-mutation-testing/releases/tag/v1.3.0)
 at commit `8d8d03e28f06665c3fc6f36ccdc7cac244a584f6`, with
-SwiftSyntax pinned to
+SwiftSyntax 603.0.2 pinned to
 `79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1`.
 
 Build the exact tool and run the same gate locally:
@@ -201,7 +201,14 @@ git -C "${tool_root}" fetch --depth 1 origin \
   8d8d03e28f06665c3fc6f36ccdc7cac244a584f6
 git -C "${tool_root}" checkout --detach FETCH_HEAD
 
-swift package --package-path "${tool_root}" resolve swift-syntax \
+swift package --package-path "${tool_root}" resolve
+python3 Scripts/check_package_pin.py \
+  "${tool_root}/Package.resolved" \
+  --schema-version 3 \
+  --identity swift-syntax \
+  --kind remoteSourceControl \
+  --location https://github.com/apple/swift-syntax.git \
+  --version 603.0.2 \
   --revision 79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1
 swift build --package-path "${tool_root}" \
   --configuration release \
@@ -211,6 +218,11 @@ MUTATION_TESTING_BIN="${tool_root}/.build/release/swift-mutation-testing" \
   MUTATION_NO_CACHE=1 \
   Scripts/mutation.sh
 ```
+
+The full resolve is intentional: SwiftPM must first construct the dependency
+graph. The pin checker then rejects any SwiftSyntax source, version, or revision
+other than the approved dependency before the build disables automatic
+resolution.
 
 `MUTATION_NO_CACHE=1` is required for a release audit. JSON, HTML, Sonar JSON,
 and Markdown reports are written to `.build/reports/mutation/`.

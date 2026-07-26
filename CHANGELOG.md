@@ -68,7 +68,8 @@ All notable changes to BibTeXKit are documented in this file.
   adversarial nesting; nested theme normalization is now iterative.
 - Overflow-prone formatting and line-number capacity estimates, plus invalid
   negative or non-finite SwiftUI geometry inputs.
-- Release metadata, platform documentation, examples, and CI coverage.
+- Release metadata, platform documentation, examples, CI coverage, and
+  clean-checkout resolution of the pinned mutation-testing toolchain.
 
 ### Performance
 

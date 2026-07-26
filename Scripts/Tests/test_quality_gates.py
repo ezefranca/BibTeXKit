@@ -13,6 +13,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 COVERAGE_CHECKER = REPOSITORY_ROOT / "Scripts" / "check_coverage.py"
 MUTATION_CHECKER = REPOSITORY_ROOT / "Scripts" / "check_mutation_score.py"
 MUTATION_RUNNER = REPOSITORY_ROOT / "Scripts" / "mutation.sh"
+PACKAGE_PIN_CHECKER = REPOSITORY_ROOT / "Scripts" / "check_package_pin.py"
 
 
 class QualityGateTests(unittest.TestCase):
@@ -97,6 +98,47 @@ class QualityGateTests(unittest.TestCase):
                 }
             ]
         }
+
+    def package_pin(
+        self,
+        *,
+        kind: str = "remoteSourceControl",
+        location: str = "https://github.com/apple/swift-syntax.git",
+        revision: str = "expected-revision",
+        schema_version: object = 3,
+        version: str = "603.0.2",
+    ) -> dict[str, object]:
+        return {
+            "pins": [
+                {
+                    "identity": "swift-syntax",
+                    "kind": kind,
+                    "location": location,
+                    "state": {
+                        "revision": revision,
+                        "version": version,
+                    },
+                }
+            ],
+            "version": schema_version,
+        }
+
+    def package_pin_arguments(self, resolved_file: Path) -> list[str]:
+        return [
+            str(resolved_file),
+            "--schema-version",
+            "3",
+            "--identity",
+            "swift-syntax",
+            "--kind",
+            "remoteSourceControl",
+            "--location",
+            "https://github.com/apple/swift-syntax.git",
+            "--version",
+            "603.0.2",
+            "--revision",
+            "expected-revision",
+        ]
 
     def test_mutation_gate_accepts_exact_score_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -298,6 +340,79 @@ class QualityGateTests(unittest.TestCase):
             self.assertFalse((directory / "mutation.html").exists())
             self.assertFalse((directory / "mutation-sonar.json").exists())
             self.assertFalse((directory / "summary.md").exists())
+
+    def test_package_pin_gate_accepts_the_exact_remote_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            resolved_file = self.write_json(
+                directory,
+                "Package.resolved",
+                self.package_pin(),
+            )
+
+            result = self.run_checker(
+                PACKAGE_PIN_CHECKER,
+                *self.package_pin_arguments(resolved_file),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "Verified swift-syntax 603.0.2 at expected-revision.",
+                result.stdout,
+            )
+
+    def test_package_pin_gate_rejects_dependency_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            drifted_payloads = {
+                "kind": self.package_pin(kind="localSourceControl"),
+                "location": self.package_pin(location="https://example.com/fork.git"),
+                "version": self.package_pin(version="603.0.3"),
+                "revision": self.package_pin(revision="unexpected-revision"),
+                "schema": self.package_pin(schema_version=2),
+            }
+
+            for name, payload in drifted_payloads.items():
+                with self.subTest(name=name):
+                    drifted_file = self.write_json(
+                        directory,
+                        f"{name}.resolved",
+                        payload,
+                    )
+                    result = self.run_checker(
+                        PACKAGE_PIN_CHECKER,
+                        *self.package_pin_arguments(drifted_file),
+                    )
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn(name, result.stderr)
+
+    def test_package_pin_gate_rejects_malformed_and_duplicate_pins(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            duplicate_payload = self.package_pin()
+            duplicate_payload["pins"].append(duplicate_payload["pins"][0])
+            duplicate_file = self.write_json(
+                directory,
+                "Duplicate.resolved",
+                duplicate_payload,
+            )
+            malformed_file = directory / "Malformed.resolved"
+            malformed_file.write_text("{", encoding="utf-8")
+
+            duplicate = self.run_checker(
+                PACKAGE_PIN_CHECKER,
+                *self.package_pin_arguments(duplicate_file),
+            )
+            malformed = self.run_checker(
+                PACKAGE_PIN_CHECKER,
+                *self.package_pin_arguments(malformed_file),
+            )
+
+            self.assertEqual(duplicate.returncode, 2)
+            self.assertIn("found 2", duplicate.stderr)
+            self.assertEqual(malformed.returncode, 2)
+            self.assertIn("error:", malformed.stderr)
 
     def test_coverage_gate_filters_nonproduction_files_and_reports_missing_branches(
         self,
